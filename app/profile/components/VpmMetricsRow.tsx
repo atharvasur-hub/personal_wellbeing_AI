@@ -11,14 +11,30 @@ import {
 
 interface VpmMetricsRowProps {
   isDarkMode?: boolean;
+  focusTime?: string;
+  skillsVerified?: string;
+  goalVelocity?: string;
+  vpmIndex?: string;
 }
 
-export default function VpmMetricsRow({ isDarkMode = false }: VpmMetricsRowProps) {
+export default function VpmMetricsRow({ 
+  isDarkMode = false,
+  focusTime,
+  skillsVerified,
+  goalVelocity,
+  vpmIndex
+}: VpmMetricsRowProps) {
+  // Priority: Prop -> localStorage -> Default Fallback
+  const displayFocusTime = focusTime || localStorage.getItem('synapse_profile_focus_time') || '2h 15m';
+  const displaySkills = skillsVerified || localStorage.getItem('synapse_profile_skills_verified') || '12 Concepts';
+  const displayVelocity = goalVelocity || localStorage.getItem('synapse_profile_goal_velocity') || '84%';
+  const displayVpm = vpmIndex || localStorage.getItem('synapse_profile_vpm_index') || '$4.82/min';
+
   const metrics = [
     {
       id: 'focus_time',
       title: 'Focus Time Reclaimed',
-      value: '14h 30m',
+      value: displayFocusTime,
       subtext: 'this week',
       change: '+18.4%',
       isPositive: true,
@@ -32,7 +48,7 @@ export default function VpmMetricsRow({ isDarkMode = false }: VpmMetricsRowProps
     {
       id: 'skills_verified',
       title: 'Skills Verified',
-      value: '12 Concepts',
+      value: displaySkills,
       subtext: 'Mastered via active recall',
       change: '+3 this week',
       isPositive: true,
@@ -46,7 +62,7 @@ export default function VpmMetricsRow({ isDarkMode = false }: VpmMetricsRowProps
     {
       id: 'goal_velocity',
       title: 'Goal Velocity',
-      value: '84%',
+      value: displayVelocity,
       subtext: 'on track for Target Role',
       change: '+5.2% speedup',
       isPositive: true,
@@ -55,12 +71,12 @@ export default function VpmMetricsRow({ isDarkMode = false }: VpmMetricsRowProps
       borderColor: isDarkMode ? 'border-amber-500/30' : 'border-amber-200',
       iconColor: isDarkMode ? 'text-amber-400 bg-amber-500/10 border-amber-500/20' : 'text-amber-700 bg-amber-50 border-amber-200',
       badgeColor: isDarkMode ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-800 border-amber-200',
-      description: 'Calculated trajectory towards Senior AI Architect.'
+      description: 'Calculated trajectory towards Target Career Goal.'
     },
     {
       id: 'vpm_index',
       title: 'Value per Minute (VPM)',
-      value: '$4.82/min',
+      value: displayVpm,
       subtext: 'Cognitive ROI',
       change: '+24% VPM Boost',
       isPositive: true,

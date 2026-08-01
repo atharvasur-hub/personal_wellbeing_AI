@@ -52,6 +52,20 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
     return localStorage.getItem('synapse_profile_xp') || '3,420';
   });
 
+  // Dynamic VPM performance metrics
+  const [focusTime, setFocusTime] = useState<string>(() => {
+    return localStorage.getItem('synapse_profile_focus_time') || '2h 15m';
+  });
+  const [skillsVerified, setSkillsVerified] = useState<string>(() => {
+    return localStorage.getItem('synapse_profile_skills_verified') || '12 Concepts';
+  });
+  const [goalVelocity, setGoalVelocity] = useState<string>(() => {
+    return localStorage.getItem('synapse_profile_goal_velocity') || '84%';
+  });
+  const [vpmIndex, setVpmIndex] = useState<string>(() => {
+    return localStorage.getItem('synapse_profile_vpm_index') || '$4.82/min';
+  });
+
   const [pivotNotice, setPivotNotice] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState<boolean>(false);
 
@@ -63,7 +77,11 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
     email: userEmail,
     streak: focusStreak,
     level: userLevel,
-    xp: userXP
+    xp: userXP,
+    focusTime: focusTime,
+    skillsVerified: skillsVerified,
+    goalVelocity: goalVelocity,
+    vpmIndex: vpmIndex
   });
 
   // Keep form updated when opening edit mode
@@ -81,7 +99,11 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
       email: userEmail,
       streak: focusStreak,
       level: userLevel,
-      xp: userXP
+      xp: userXP,
+      focusTime: focusTime,
+      skillsVerified: skillsVerified,
+      goalVelocity: goalVelocity,
+      vpmIndex: vpmIndex
     });
     setIsEditing(true);
   };
@@ -95,6 +117,10 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
     setFocusStreak(editForm.streak);
     setUserLevel(editForm.level);
     setUserXP(editForm.xp);
+    setFocusTime(editForm.focusTime);
+    setSkillsVerified(editForm.skillsVerified);
+    setGoalVelocity(editForm.goalVelocity);
+    setVpmIndex(editForm.vpmIndex);
 
     // Save to LocalStorage
     localStorage.setItem('synapse_profile_name', editForm.name);
@@ -104,6 +130,10 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
     localStorage.setItem('synapse_profile_streak', editForm.streak);
     localStorage.setItem('synapse_profile_level', editForm.level);
     localStorage.setItem('synapse_profile_xp', editForm.xp);
+    localStorage.setItem('synapse_profile_focus_time', editForm.focusTime);
+    localStorage.setItem('synapse_profile_skills_verified', editForm.skillsVerified);
+    localStorage.setItem('synapse_profile_goal_velocity', editForm.goalVelocity);
+    localStorage.setItem('synapse_profile_vpm_index', editForm.vpmIndex);
 
     setIsEditing(false);
   };
@@ -116,6 +146,10 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
     const defaultStreak = '4-Day Focus Streak';
     const defaultLevel = '14';
     const defaultXP = '3,420';
+    const defaultFocusTime = '2h 15m';
+    const defaultSkills = '12 Concepts';
+    const defaultVelocity = '84%';
+    const defaultVpm = '$4.82/min';
 
     setUserName(defaultName);
     setUserRole(defaultRole);
@@ -124,6 +158,10 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
     setFocusStreak(defaultStreak);
     setUserLevel(defaultLevel);
     setUserXP(defaultXP);
+    setFocusTime(defaultFocusTime);
+    setSkillsVerified(defaultSkills);
+    setGoalVelocity(defaultVelocity);
+    setVpmIndex(defaultVpm);
 
     localStorage.removeItem('synapse_profile_name');
     localStorage.removeItem('synapse_profile_role');
@@ -132,6 +170,10 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
     localStorage.removeItem('synapse_profile_streak');
     localStorage.removeItem('synapse_profile_level');
     localStorage.removeItem('synapse_profile_xp');
+    localStorage.removeItem('synapse_profile_focus_time');
+    localStorage.removeItem('synapse_profile_skills_verified');
+    localStorage.removeItem('synapse_profile_goal_velocity');
+    localStorage.removeItem('synapse_profile_vpm_index');
 
     setIsEditing(false);
   };
@@ -292,7 +334,13 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
             </div>
           </div>
 
-          <VpmMetricsRow isDarkMode={isDarkMode} />
+          <VpmMetricsRow 
+            isDarkMode={isDarkMode} 
+            focusTime={focusTime}
+            skillsVerified={skillsVerified}
+            goalVelocity={goalVelocity}
+            vpmIndex={vpmIndex}
+          />
         </div>
 
         {/* 3 & 4. Dual Graph Section: Radar Chart + Line Simulator */}
@@ -369,7 +417,7 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
       {/* EDIT PROFILE MODAL */}
       {isEditing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in">
-          <div className={`w-full max-w-xl rounded-3xl border p-6 sm:p-8 shadow-2xl transition-all ${
+          <div className={`w-full max-w-xl rounded-3xl border p-6 sm:p-8 shadow-2xl transition-all max-h-[90vh] overflow-y-auto ${
             isDarkMode 
               ? 'bg-slate-900 border-slate-800 text-slate-100' 
               : 'bg-white border-stone-200 text-stone-900'
@@ -469,6 +517,78 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
                       isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-300 text-stone-900'
                     }`}
                   />
+                </div>
+              </div>
+
+              {/* VPM Performance Metrics Section */}
+              <div className="pt-2 border-t border-stone-200 dark:border-slate-800">
+                <span className={`block text-xs font-mono font-bold uppercase mb-3 text-indigo-500`}>
+                  VPM Performance Metrics
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className={`block text-xs font-mono font-bold uppercase mb-1.5 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
+                      Focus Time Reclaimed
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editForm.focusTime}
+                      onChange={(e) => setEditForm({ ...editForm, focusTime: e.target.value })}
+                      placeholder="e.g. 2h 15m"
+                      className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                        isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-300 text-stone-900'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-xs font-mono font-bold uppercase mb-1.5 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
+                      Skills Verified
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.skillsVerified}
+                      onChange={(e) => setEditForm({ ...editForm, skillsVerified: e.target.value })}
+                      placeholder="e.g. 12 Concepts"
+                      className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                        isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-300 text-stone-900'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label className={`block text-xs font-mono font-bold uppercase mb-1.5 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
+                      Goal Velocity
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.goalVelocity}
+                      onChange={(e) => setEditForm({ ...editForm, goalVelocity: e.target.value })}
+                      placeholder="e.g. 84%"
+                      className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                        isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-300 text-stone-900'
+                      }`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={`block text-xs font-mono font-bold uppercase mb-1.5 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
+                      Value per Minute (VPM)
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.vpmIndex}
+                      onChange={(e) => setEditForm({ ...editForm, vpmIndex: e.target.value })}
+                      placeholder="e.g. $4.82/min"
+                      className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                        isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-300 text-stone-900'
+                      }`}
+                    />
+                  </div>
                 </div>
               </div>
 
