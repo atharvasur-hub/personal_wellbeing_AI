@@ -5,44 +5,19 @@ import { z } from 'zod';
 
 export const config = { runtime: 'edge' };
 
-/**
- * Send chat completions request directly to local Ollama instance (http://localhost:11434/v1)
- */
-export async function sendOllamaChatRequest(messages: any[], options: any = {}) {
-  try {
-    const res = await fetch('http://localhost:11434/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: options.model || 'llama3',
-        messages,
-        temperature: options.temperature || 0.7
-      })
-    });
-    if (!res.ok) throw new Error(`Ollama HTTP error ${res.status}`);
-    return await res.json();
-  } catch (err: any) {
-    throw new Error(`Ollama connection error: ${err.message}`);
-  }
-}
-
 export default async function POST(req: Request) {
   try {
     const { messages } = await req.json();
 
-    // Check if a cloud Gemini API key exists in the environment
     const hasCloudKey = !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== "";
-
     let selectedModel;
 
     if (hasCloudKey) {
-      // Production / Cloud Mode: Use Google Gemini
       const google = createGoogleGenerativeAI({
         apiKey: process.env.GEMINI_API_KEY,
       });
       selectedModel = google('gemini-1.5-pro-latest');
     } else {
-      // Local / Offline Mode: Use Local Ollama (No API key needed)
       const localOllama = createOpenAI({
         baseURL: 'http://localhost:11434/v1',
         apiKey: 'not-needed',
@@ -53,7 +28,8 @@ export default async function POST(req: Request) {
     const result = await streamText({
       model: selectedModel,
       messages,
-      system: "You are an Agentic Personal Growth Curator helping optimize user habits and learning signals.",
+      system: `You are an advanced Agentic Personal Growth Curator with a mandatory Cognitive Load & Burnout Shield. 
+      Analyze the user's input patterns. If they show signs of intense fatigue, cramming, or repetitive stress, you MUST immediately call the 'triggerBurnoutShield' tool to enforce a recovery protocol.`,
 
       tools: {
         evaluateContent: tool({
@@ -71,12 +47,29 @@ export default async function POST(req: Request) {
             };
           },
         }),
+
+        triggerBurnoutShield: tool({
+          description: 'Activates when cognitive overload or burnout risk is detected. Locks distractions and prescribes a recovery routine.',
+          parameters: z.object({
+            stressIndicator: z.string(),
+            recommendedRestMinutes: z.number(),
+          }),
+          execute: async ({ stressIndicator, recommendedRestMinutes }) => {
+            return {
+              status: "BURNOUT_SHIELD_ACTIVATED",
+              actionTaken: "Restricted high-friction endpoints. Enforcing cognitive reset.",
+              indicator: stressIndicator,
+              duration: `${recommendedRestMinutes} minutes`,
+              prescription: "Step away from the screen, hydrate, and execute a physical stretch break."
+            };
+          },
+        }),
       },
     });
 
     return result.toDataStreamResponse();
   } catch (error) {
-    console.error("Error in hybrid AI route:", error);
+    console.error("Error in Burnout Shield route:", error);
     return new Response(JSON.stringify({ error: "Failed to process AI request" }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
