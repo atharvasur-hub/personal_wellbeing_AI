@@ -14,20 +14,44 @@ export const supabase = isRealSupabaseConfig
   ? createClient(rawSupabaseUrl, rawSupabaseAnonKey) 
   : null;
 
+// Local registered user storage helper
+function getLocalUsers() {
+  try {
+    const raw = localStorage.getItem('synapse_registered_users');
+    return raw ? JSON.parse(raw) : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function saveLocalUser(email, password, displayName) {
+  try {
+    const users = getLocalUsers();
+    const existingIndex = users.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
+    const userObj = { email: email.toLowerCase(), password, name: displayName, id: 'usr_' + Date.now() };
+    
+    if (existingIndex >= 0) {
+      users[existingIndex] = userObj;
+    } else {
+      users.push(userObj);
+    }
+    localStorage.setItem('synapse_registered_users', JSON.stringify(users));
+    return userObj;
+  } catch (err) {
+    return { email, name: displayName, id: 'usr_' + Date.now() };
+  }
+}
+
 // ==========================================
 // SUPABASE AUTHENTICATION HELPERS
 // ==========================================
 
 export async function signUpWithEmail(email, password, displayName = 'Atharva Sur') {
+  // Always register in local account database
+  const localUser = saveLocalUser(email, password, displayName);
+
   if (!supabase) {
-    return { 
-      user: { 
-        id: 'local_user_' + Date.now(), 
-        email, 
-        user_metadata: { display_name: displayName } 
-      }, 
-      error: null 
-    };
+    return { user: localUser, error: null };
   }
 
   try {
@@ -40,12 +64,8 @@ export async function signUpWithEmail(email, password, displayName = 'Atharva Su
     });
 
     if (error) {
-      // If error is network related or invalid URL, fallback to local user creation
       if (error.message.includes('fetch') || error.message.includes('Network') || error.message.includes('URL')) {
-        return {
-          user: { id: 'user_' + Date.now(), email, user_metadata: { display_name: displayName } },
-          error: null
-        };
+        return { user: localUser, error: null };
       }
       return { user: null, error: error.message };
     }
@@ -58,30 +78,33 @@ export async function signUpWithEmail(email, password, displayName = 'Atharva Su
       }], { onConflict: 'user_id' }).catch(() => {});
     }
 
-    return { user: data?.user || { id: 'user_' + Date.now(), email }, error: null };
+    return { user: data?.user || localUser, error: null };
   } catch (err) {
-    // Graceful fallback for network or connection failures
-    return { 
-      user: { 
-        id: 'local_user_' + Date.now(), 
-        email, 
-        user_metadata: { display_name: displayName } 
-      }, 
-      error: null 
-    };
+    return { user: localUser, error: null };
   }
 }
 
 export async function signInWithEmail(email, password) {
   if (!supabase) {
-    return { 
-      user: { 
-        id: 'local_user_' + Date.now(), 
-        email, 
-        user_metadata: { display_name: email.split('@')[0] } 
-      }, 
-      error: null 
-    };
+    // Verify strict account existence in local storage
+    const users = getLocalUsers();
+    const matchedUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+
+    if (!matchedUser) {
+      return { 
+        user: null, 
+        error: "Account not found. Please click 'CREATE SIGN UP ACCOUNT' to register first!" 
+      };
+    }
+
+    if (matchedUser.password !== password) {
+      return { 
+        user: null, 
+        error: "Invalid password. Please check your credentials and try again." 
+      };
+    }
+
+    return { user: matchedUser, error: null };
   }
 
   try {
@@ -92,24 +115,28 @@ export async function signInWithEmail(email, password) {
 
     if (error) {
       if (error.message.includes('fetch') || error.message.includes('Network')) {
-        return {
-          user: { id: 'user_' + Date.now(), email, user_metadata: { display_name: email.split('@')[0] } },
-          error: null
-        };
+        // Fall back to local account verification
+        const users = getLocalUsers();
+        const matchedUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+        if (!matchedUser) {
+          return { user: null, error: "Account not found. Please click 'CREATE SIGN UP ACCOUNT' to register first!" };
+        }
+        if (matchedUser.password !== password) {
+          return { user: null, error: "Invalid password. Please check your credentials." };
+        }
+        return { user: matchedUser, error: null };
       }
       return { user: null, error: error.message };
     }
 
     return { user: data.user, error: null };
   } catch (err) {
-    return { 
-      user: { 
-        id: 'local_user_' + Date.now(), 
-        email, 
-        user_metadata: { display_name: email.split('@')[0] } 
-      }, 
-      error: null 
-    };
+    const users = getLocalUsers();
+    const matchedUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (!matchedUser) {
+      return { user: null, error: "Account not found. Please click 'CREATE SIGN UP ACCOUNT' to register first!" };
+    }
+    return { user: matchedUser, error: null };
   }
 }
 
@@ -117,7 +144,7 @@ export async function signInWithGoogle() {
   if (!supabase) {
     return { 
       user: { 
-        id: 'google_local_' + Date.now(),
+        id: 'google_user_' + Date.now(),
         email: 'google.user@gmail.com', 
         user_metadata: { display_name: 'Atharva Sur (Google)' } 
       }, 
@@ -138,7 +165,7 @@ export async function signInWithGoogle() {
   } catch (err) {
     return { 
       user: { 
-        id: 'google_local_' + Date.now(),
+        id: 'google_user_' + Date.now(),
         email: 'google.user@gmail.com', 
         user_metadata: { display_name: 'Atharva Sur (Google)' } 
       }, 
