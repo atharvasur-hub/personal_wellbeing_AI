@@ -202,6 +202,7 @@ class PointsAwardRequest(BaseModel):
     user_id: str
     action_type: str
     points: int
+    metadata: Optional[Dict[str, Any]] = None
 
 class ChatRequest(BaseModel):
     message: str
@@ -507,9 +508,18 @@ async def recommend(req: GoalRequest):
     intent = _analyze_intent(req.goal)
     user_id = req.user_id or "usr_default"
     failed_concepts = _get_failed_concepts(user_id)
+    
+    recent_interests = []
+    if supabase_client:
+        try:
+            res = supabase_client.table("user_video_interests").select("video_title").eq("user_id", user_id).order("created_at", desc=True).limit(5).execute()
+            if res.data:
+                recent_interests = [r["video_title"] for r in res.data]
+        except Exception as e:
+            print(f"[FastAPI] Error fetching user_video_interests: {e}")
 
     try:
-        items = await _gemini_recommendations(req.goal, failed_concepts)
+        items = await _gemini_recommendations(req.goal, failed_concepts, recent_interests)
         if items:
             return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
     except Exception as e:
@@ -520,15 +530,21 @@ async def recommend(req: GoalRequest):
     return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
 
 
-async def _gemini_recommendations(goal: str, failed_concepts: List[str] = []) -> List[ContentItem]:
+async def _gemini_recommendations(goal: str, failed_concepts: List[str] = [], recent_interests: List[str] = []) -> List[ContentItem]:
     gap_instruction = ""
     if failed_concepts:
         concepts_str = ", ".join(failed_concepts)
         gap_instruction = f'\nYou are an adaptive learning curator. The user recently struggled with the following concepts: {concepts_str}. You MUST prioritize and generate content cards specifically targeting these exact blind spots before recommending any general content. Tag the returned JSON object with `is_gap_fix: true`.'
+        
+    interest_instruction = ""
+    if recent_interests:
+        interests_str = ", ".join(recent_interests)
+        interest_instruction = f'\nThe user recently watched and completed these topics: {interests_str}. You MUST generate NEW, highly relevant recommendations that build on these specific topics to maintain their interest.'
 
     prompt = f"""
 You are an expert learning curator AI. A user has stated this goal: "{goal}"
 {gap_instruction}
+{interest_instruction}
 
 Return ONLY a valid JSON array with exactly 4 objects. No markdown, no extra text. Each object:
 - "type": one of "video", "podcast", "speech", "article"
@@ -1991,6 +2007,16 @@ async def award_points(req: PointsAwardRequest):
     points_to_award = req.points
     if req.action_type == "video_watched":
         points_to_award = 10
+        if req.metadata and req.metadata.get("title") and supabase_client:
+            try:
+                supabase_client.table("user_video_interests").insert({
+                    "user_id": req.user_id,
+                    "video_title": req.metadata.get("title"),
+                    "video_type": req.metadata.get("contentType", "video")
+                }).execute()
+            except Exception as e:
+                print(f"[FastAPI] Error inserting video interest: {e}")
+
     elif req.action_type == "focus_mode_complete":
         points_to_award = 50
     elif req.action_type == "podcast_listened":

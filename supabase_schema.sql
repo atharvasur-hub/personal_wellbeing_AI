@@ -34,6 +34,15 @@ CREATE TABLE IF NOT EXISTS public.community_messages (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 2.2 Create User Video Interests Table
+CREATE TABLE IF NOT EXISTS public.user_video_interests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  video_title TEXT NOT NULL,
+  video_type TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- 3. Create Identity Nodes Table
 CREATE TABLE IF NOT EXISTS public.identity_nodes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
