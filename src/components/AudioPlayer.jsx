@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Play, Pause, SkipForward, SkipBack, Headphones } from 'lucide-react';
+import { awardPoints } from '../lib/backendApi';
 
 export default function AudioPlayer({ item, isDarkMode }) {
   const audioRef = useRef(null);
@@ -82,7 +83,12 @@ export default function AudioPlayer({ item, isDarkMode }) {
           ref={audioRef} 
           src={item.sourceUrl || item.source_url || item.url} 
           onTimeUpdate={handleTimeUpdate} 
-          onEnded={() => setIsPlaying(false)}
+          onEnded={() => {
+            setIsPlaying(false);
+            awardPoints('usr_default', 'podcast_listened', 10).then(() => {
+              window.dispatchEvent(new CustomEvent('pointsAwarded', { detail: { points: 10 } }));
+            }).catch(console.error);
+          }}
         />
       </div>
     </div>

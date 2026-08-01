@@ -294,7 +294,24 @@ export async function submitDeepSkillQuizAnswer(skill, question, selectedOption,
   return result;
 }
 
-// ── PILLAR 10: Goal-Based Community Cohorts & AI Facilitator ──
+// ── PILLAR 10: Gamified Points System & Leaderboard ───────────
+export async function awardPoints(userId = 'usr_default', actionType, points) {
+  return apiFetch('/api/points/award', {
+    user_id: userId,
+    action_type: actionType,
+    points: points
+  });
+}
+
+export async function fetchLeaderboard() {
+  return apiGet('/api/leaderboard');
+}
+
+export async function fetchUserPoints(userId = 'usr_default') {
+  return apiGet(`/api/points/balance?user_id=${encodeURIComponent(userId)}`);
+}
+
+// ── PILLAR 11: Goal-Based Community Cohorts & AI Facilitator ──
 export async function getCommunityGroup(userId = 'usr_default') {
   return apiGet(`/api/community/group?user_id=${encodeURIComponent(userId)}`);
 }
@@ -326,4 +343,3 @@ export async function fetchDynamicRoadmapFromBackend(aspiration, topics = [], us
     topics
   });
 }
-
