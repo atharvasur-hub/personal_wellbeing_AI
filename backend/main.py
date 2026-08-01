@@ -1847,21 +1847,32 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 @app.post("/api/points/award")
 async def award_points(req: PointsAwardRequest):
+    # Enforce points logic on backend
+    points_to_award = req.points
+    if req.action_type == "video_watched":
+        points_to_award = 10
+    elif req.action_type == "focus_mode_complete":
+        points_to_award = 50
+    elif req.action_type == "podcast_listened":
+        points_to_award = 15
+    elif req.action_type == "speech_read":
+        points_to_award = 5
+
     if not supabase_client:
-        return {"status": "success", "message": "Logged to in-memory fallback", "points": req.points}
+        return {"status": "success", "message": "Logged to in-memory fallback", "points": points_to_award}
     
     try:
         # 1. Log the interaction
         supabase_client.table("points_log").insert({
             "user_id": req.user_id,
             "action_type": req.action_type,
-            "points_awarded": req.points
+            "points_awarded": points_to_award
         }).execute()
         
         # 2. Update total points
         res = supabase_client.table("user_points").select("total_points").eq("user_id", req.user_id).execute()
         if res.data and len(res.data) > 0:
-            new_points = res.data[0]["total_points"] + req.points
+            new_points = res.data[0]["total_points"] + points_to_award
             supabase_client.table("user_points").update({"total_points": new_points}).eq("user_id", req.user_id).execute()
         else:
             new_points = req.points
