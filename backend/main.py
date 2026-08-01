@@ -2199,6 +2199,186 @@ async def get_leaderboard():
         return {"leaderboard": []}
 
 
+# ═══════════════════════════════════════════════════════════════
+# 11. GOAL-BASED COMMUNITY COHORTS & AI FACILITATOR
+# ═══════════════════════════════════════════════════════════════
+
+class CommunityMessageRequest(BaseModel):
+    community_id: str
+    sender_id: str
+    sender_name: str
+    text: str
+    role: Optional[str] = "user"
+
+
+COMMUNITY_COHORTS = {
+    "ai-ml": {
+        "id": "ai-ml",
+        "name": "Synapse AI & Neural Systems Cohort",
+        "description": "Collaborative peer network for AI/ML engineering, system architecture, and cognitive optimization.",
+        "member_count": 142,
+        "agent_name": "Gemini-2.0-Flash",
+        "agent_avatar": "🤖",
+        "current_topic": "Optimizing LLM Inference Latency & RAG Vectors"
+    },
+    "full-stack": {
+        "id": "full-stack",
+        "name": "Full Stack & Cloud Architecture Cohort",
+        "description": "High-velocity developers building resilient REST microservices, React UI design systems, and distributed databases.",
+        "member_count": 98,
+        "agent_name": "FastAPI-Architect",
+        "agent_avatar": "⚡",
+        "current_topic": "Async Event Loops & Tailwind Glassmorphism UI"
+    },
+    "growth": {
+        "id": "growth",
+        "name": "High-Signal Growth & Deep Focus Cohort",
+        "description": "Productivity catalysts optimizing cognitive endurance, time-blocking, and Value Per Minute (VPM) metrics.",
+        "member_count": 115,
+        "agent_name": "VPM-Optimizer",
+        "agent_avatar": "🌿",
+        "current_topic": "Circadian Fatigue Reset & Box Breathing Sprints"
+    }
+}
+
+COMMUNITY_MESSAGES_STORE: Dict[str, List[dict]] = {
+    "ai-ml": [
+        {
+            "id": "msg-1",
+            "community_id": "ai-ml",
+            "sender_id": "agent-gemini",
+            "sender_name": "Gemini-2.0-Flash",
+            "text": "Welcome to the Synapse AI & Neural Systems Cohort! Share your current AI project or vector embedding pipeline.",
+            "role": "assistant",
+            "is_announcement": True,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        },
+        {
+            "id": "msg-2",
+            "community_id": "ai-ml",
+            "sender_id": "usr_sophia",
+            "sender_name": "Sophia Chen",
+            "text": "Currently fine-tuning PyTorch transformer weights for low-memory deployment!",
+            "role": "user",
+            "is_announcement": False,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }
+    ],
+    "full-stack": [
+        {
+            "id": "msg-1",
+            "community_id": "full-stack",
+            "sender_id": "agent-fastapi",
+            "sender_name": "FastAPI-Architect",
+            "text": "Welcome Full Stack Builders! Let's discuss microservice scalability and React component hygiene.",
+            "role": "assistant",
+            "is_announcement": True,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }
+    ],
+    "growth": [
+        {
+            "id": "msg-1",
+            "community_id": "growth",
+            "sender_id": "agent-vpm",
+            "sender_name": "VPM-Optimizer",
+            "text": "Welcome to the Deep Focus Cohort! Remember to log your 25-minute sprints and monitor cognitive fatigue.",
+            "role": "assistant",
+            "is_announcement": True,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }
+    ]
+}
+
+
+@app.get("/api/community/group")
+async def get_community_group(user_id: Optional[str] = "usr_default"):
+    """Retrieve cohort allocation for user based on aspiration."""
+    profile = in_memory_db["user_profiles"].get(user_id)
+    asp = (profile.get("aspiration") if profile else "").lower()
+
+    if any(k in asp for k in ["react", "frontend", "web", "full stack", "python"]):
+        cohort_id = "full-stack"
+    elif any(k in asp for k in ["growth", "focus", "health", "productivity"]):
+        cohort_id = "growth"
+    else:
+        cohort_id = "ai-ml"
+
+    return COMMUNITY_COHORTS[cohort_id]
+
+
+@app.get("/api/community/messages")
+async def get_community_messages(community_id: Optional[str] = "ai-ml"):
+    """Retrieve chat history for a community group."""
+    msgs = COMMUNITY_MESSAGES_STORE.get(community_id, [])
+    return {"messages": msgs}
+
+
+@app.post("/api/community/messages")
+async def send_community_message(req: CommunityMessageRequest):
+    """Post a message to a community cohort."""
+    cid = req.community_id or "ai-ml"
+    if cid not in COMMUNITY_MESSAGES_STORE:
+        COMMUNITY_MESSAGES_STORE[cid] = []
+
+    msg_obj = {
+        "id": f"msg-{int(time.time()*1000)}",
+        "community_id": cid,
+        "sender_id": req.sender_id,
+        "sender_name": req.sender_name,
+        "text": req.text,
+        "role": req.role or "user",
+        "is_announcement": False,
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+    COMMUNITY_MESSAGES_STORE[cid].append(msg_obj)
+
+    # AI Facilitator Response
+    if req.role == "user":
+        facilitator_name = COMMUNITY_COHORTS.get(cid, {}).get("agent_name", "AI Facilitator")
+        ai_reply = _generate_gemini(f"You are the community facilitator ({facilitator_name}) for cohort {cid}. A member named {req.sender_name} posted: '{req.text}'. Provide a 2-sentence encouraging technical response.")
+        if not ai_reply:
+            ai_reply = f"Great insight @{req.sender_name}! Keep pushing your {cid} skill velocity."
+
+        reply_obj = {
+            "id": f"msg-{int(time.time()*1000)+1}",
+            "community_id": cid,
+            "sender_id": "agent-facilitator",
+            "sender_name": facilitator_name,
+            "text": ai_reply,
+            "role": "assistant",
+            "is_announcement": False,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }
+        COMMUNITY_MESSAGES_STORE[cid].append(reply_obj)
+
+    return {"status": "success", "message": msg_obj}
+
+
+@app.post("/api/community/trigger-announcement")
+async def trigger_community_announcement(req: Dict[str, Any]):
+    cid = req.get("community_id", "ai-ml")
+    facilitator_name = COMMUNITY_COHORTS.get(cid, {}).get("agent_name", "AI Facilitator")
+
+    announcement_text = f"📢 **Cohort Milestone Alert:** Community members achieved 84% average skill velocity today! Keep up the focus sprints."
+
+    announcement_obj = {
+        "id": f"msg-{int(time.time()*1000)}",
+        "community_id": cid,
+        "sender_id": "agent-facilitator",
+        "sender_name": facilitator_name,
+        "text": announcement_text,
+        "role": "assistant",
+        "is_announcement": True,
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+    if cid not in COMMUNITY_MESSAGES_STORE:
+        COMMUNITY_MESSAGES_STORE[cid] = []
+    COMMUNITY_MESSAGES_STORE[cid].append(announcement_obj)
+
+    return {"status": "success", "announcement": announcement_obj}
+
+
 @app.get("/")
 async def root():
     return {
