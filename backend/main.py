@@ -1,17 +1,29 @@
+"""
+=============================================================
+ SYNAPSE AI — FastAPI Backend Engine
+ Sole Backend for ML Models, Data Curation, Habit Steering,
+ User Persistence & Auth Services
+=============================================================
+
+SETUP:
+  1. pip install fastapi uvicorn google-generativeai supabase python-dotenv pydantic
+
+RUN:
+  cd backend && uvicorn main:app --reload --port 8000
+
+API DOCS:
+  http://localhost:8000/docs
+=============================================================
+"""
+
 import os
 import json
 import time
-import sqlite3
-try:
-    import google.generativeai as genai
-except ImportError:
-    genai = None
-
-from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from typing import Optional, List, Dict, Any
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+import google.generativeai as genai
 
 # ── Load environment variables ────────────────────────────────
 from dotenv import load_dotenv, find_dotenv
@@ -26,57 +38,35 @@ SUPABASE_KEY   = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_AN
 
 # ── Configure Gemini Multi-Model Generator ─────────────────────
 def _generate_gemini(prompt: str) -> str:
-    """Configures and attempts Gemini API calls across valid Flash/Pro models."""
+    """Configures and attempts Gemini API calls across multiple Flash/Pro models."""
     key = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or "").strip()
     if not key or key == "YOUR_GEMINI_API_KEY_HERE":
         return ""
-
-    # Strategy 1: Try google.generativeai SDK
-    if genai:
-        try:
-            genai.configure(api_key=key)
-            candidate_models = [
-                "gemini-2.5-flash",
-                "gemini-2.0-flash",
-                "gemini-1.5-flash",
-                "gemini-1.5-pro",
-                "gemini-pro"
-            ]
-            for model_name in candidate_models:
-                try:
-                    m = genai.GenerativeModel(model_name)
-                    res = m.generate_content(prompt)
-                    if res and res.text:
-                        return res.text.strip()
-                except Exception:
-                    continue
-        except Exception as e:
-            print(f"[FastAPI] SDK Gemini call exception: {e}")
-
-    # Strategy 2: Direct REST HTTP Call Fallback
     try:
-        import urllib.request
-        import urllib.parse
-
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}"
-        payload = json.dumps({
-            "contents": [{"parts": [{"text": prompt}]}]
-        }).encode("utf-8")
-
-        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=12) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            candidates = data.get("candidates", [])
-            if candidates:
-                parts = candidates[0].get("content", {}).get("parts", [])
-                if parts and "text" in parts[0]:
-                    return parts[0]["text"].strip()
+        genai.configure(api_key=key)
+        candidate_models = [
+            "gemini-2.5-flash",
+            "gemini-3.6-flash",
+            "gemini-2.0-flash",
+            "gemini-flash-latest",
+            "gemini-2.5-pro",
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro"
+        ]
+        for model_name in candidate_models:
+            try:
+                m = genai.GenerativeModel(model_name)
+                res = m.generate_content(prompt)
+                if res and res.text:
+                    return res.text.strip()
+            except Exception:
+                continue
     except Exception as e:
-        print(f"[FastAPI] REST Gemini call exception: {e}")
-
+        print(f"[FastAPI] Gemini call exception: {e}")
     return ""
 
-gemini_configured = bool(GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_API_KEY_HERE")
+gemini_configured = bool(GEMINI_API_KEY)
 
 # ── Configure Supabase (Server-Side Client) ───────────────────
 supabase_client = None
@@ -143,36 +133,16 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- 1. Database Setup ---
-# This creates a local file named 'users.db' and builds the table if it doesn't exist
-def init_db():
-    conn = sqlite3.connect("users.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            email TEXT UNIQUE,
-            password TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
 
-# Run the setup when the file loads
-init_db()
-
-# --- Define the Signup Data Model ---
-class UserSignup(BaseModel):
-    name: str
-    email: str
-    password: str
+# ═══════════════════════════════════════════════════════════════
+# PYDANTIC SCHEMAS
+# ═══════════════════════════════════════════════════════════════
 
 class ChatRequest(BaseModel):
     message: str
@@ -189,7 +159,7 @@ class GoalRequest(BaseModel):
     user_id: Optional[str] = "usr_default"
 
 class ContentItem(BaseModel):
-    type: str          # "video" | "short" | "reel" | "article"
+    type: str          # "video" | "short" | "reel" | "article" | "podcast" | "speech"
     title: str
     youtube_id: str    # empty string for articles
     url: str
@@ -197,6 +167,9 @@ class ContentItem(BaseModel):
     reason: str
     signal_score: int
     is_gap_fix: Optional[bool] = False
+    content_type: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    source_url: Optional[str] = None
 
 
 class RecommendationResponse(BaseModel):
@@ -328,191 +301,46 @@ class RoadmapNodeItem(BaseModel):
 # ═══════════════════════════════════════════════════════════════
 
 CHAT_SYSTEM_PROMPT = """
-You are Synapse AI — an expert AI coding, technical learning, and personal growth assistant.
-MANDATORY ACCURACY RULES:
-1. ALWAYS ANSWER THE USER'S SPECIFIC QUESTION OR QUERY DIRECTLY, ACCURATELY, AND PRECISELY FIRST.
-2. Provide clean, syntactically correct, production-grade code snippets when asked programming or technical questions.
-3. Provide exact facts and concise, well-structured markdown explanations. Never dodge or redirect away from the user's explicit request.
-4. Use standard markdown for code blocks (```language ... ```), inline code (`code`), bold text, and bullet lists.
+You are Synapse AI — an elite personal growth and wellbeing AI assistant.
+Your role is to help the user achieve their goals, improve focus, manage habits, and accelerate learning.
+Tone: supportive, precise, motivating, and high-tech.
+Keep responses concise (3-5 sentences max unless the user asks for detail).
+Always tie your advice directly to the user's stated goals and wellbeing.
 """.strip()
 
 def _get_user_profile_context(user_id: str) -> str:
     profile = in_memory_db["user_profiles"].get(user_id)
     deep_skill = in_memory_db["user_deep_skills"].get(user_id)
     
-    name = profile.get("name") if profile else "Atharva Sur"
-    role = profile.get("role") if profile else "Growth Catalyst • Tier 3"
-    aspiration = profile.get("aspiration") if profile else "Senior AI Architect"
-    skills = deep_skill.get("skills") if deep_skill else ["Systems Architecture", "Deep Work Endurance", "AI Alignment & Safety"]
-    condition = deep_skill.get("condition") if deep_skill else "Deep Skill Focus"
+    name = profile.get("name") if profile else None
+    role = profile.get("role") if profile else None
+    aspiration = profile.get("aspiration") if profile else None
+    skills = deep_skill.get("skills") if deep_skill else None
+    condition = deep_skill.get("condition") if deep_skill else None
+
+    # Fallback to defaults
+    if not name or not role or not aspiration:
+        name = name or "Atharva Sur"
+        role = role or "Growth Catalyst • Tier 3"
+        aspiration = aspiration or "Senior AI Architect"
     
-    skills_str = ", ".join(skills)
+    skills_str = ", ".join(skills) if skills else "Systems Architecture, Deep Work Endurance, AI Alignment & Safety"
+    condition_str = condition or "Deep Skill Focus"
     
-    return (
-        f"User Profile Context:\n"
-        f"- User Name: {name}\n"
-        f"- Target Goal: {aspiration}\n"
-        f"- Core Skills: {skills_str}\n"
-        f"- Current Energy Condition: {condition}\n"
+    context = (
+        f"User Session Information:\n"
+        f"- Name: {name}\n"
+        f"- Current Role: {role}\n"
+        f"- Career Goal/Aspiration: {aspiration}\n"
+        f"- Target Skills: {skills_str}\n"
+        f"- Current Condition: {condition_str}\n\n"
+        f"IMPORTANT GUIDANCE RULES FOR SYNAPSE AI:\n"
+        f"1. You are the 'brain' of the project. You must actively guide the user to bridge the gap between their current role ({role}) and their career goal ({aspiration}).\n"
+        f"2. Tailor your responses to focus on their target skills ({skills_str}).\n"
+        f"3. Incorporate their energy state/condition ({condition_str}) into recommendations. If they are burned out or seeking balance, advise recovery or time-boxing. If they are in deep focus, suggest intense, structured study sprints.\n"
+        f"4. Proactively prompt them with micro-steps they can take today to move closer to their goal."
     )
-
-
-def _generate_smart_fallback(user_msg: str, user_id: str) -> str:
-    import re
-    msg = user_msg.lower().strip()
-    if msg.startswith("[") and "]" in msg:
-        msg = msg.split("]", 1)[1].strip()
-
-    def has_word(word: str) -> bool:
-        return bool(re.search(r'\b' + re.escape(word) + r'\b', msg))
-
-    # Java specific
-    if has_word("java") and not (has_word("script") or has_word("javascript")):
-        return (
-            "☕ **Java Core & Enterprise Architecture:**\n\n"
-            "```java\n"
-            "// Object-Oriented Java Fundamentals\n"
-            "public class GrowthMilestone {\n"
-            "    private String name;\n"
-            "    private int score;\n\n"
-            "    public GrowthMilestone(String name, int score) {\n"
-            "        this.name = name;\n"
-            "        this.score = score;\n"
-            "    }\n\n"
-            "    public void display() {\n"
-            "        System.out.println(\"Milestone: \" + name + \" | Score: \" + score);\n"
-            "    }\n\n"
-            "    public static void main(String[] args) {\n"
-            "        GrowthMilestone milestone = new GrowthMilestone(\"Java System Design\", 98);\n"
-            "        milestone.display();\n"
-            "    }\n"
-            "}\n"
-            "```\n\n"
-            "**Core Java Pillars:**\n"
-            "1. **Object-Oriented Programming:** Encapsulation, Inheritance, Polymorphism, Abstraction.\n"
-            "2. **JVM & Memory Management:** Garbage Collection, Heap allocation, JIT Compilation.\n"
-            "3. **Enterprise Ecosystem:** Spring Boot microservices, Maven/Gradle, JPA/Hibernate."
-        )
-
-    # Python specific
-    if any(has_word(k) for k in ["python", "pip", "django", "fastapi", "flask", "code", "script"]):
-        return (
-            "🐍 **Python Technical Solution & Best Practices:**\n\n"
-            "```python\n"
-            "# Production-grade Async FastAPI Endpoint Example\n"
-            "from fastapi import FastAPI, HTTPException\n"
-            "from pydantic import BaseModel, Field\n"
-            "from typing import List, Optional\n\n"
-            "app = FastAPI(title='High Performance Service')\n\n"
-            "class SkillItem(BaseModel):\n"
-            "    name: str = Field(..., example='Async Architecture')\n"
-            "    score: int = Field(default=95, ge=0, le=100)\n\n"
-            "@app.post('/api/v1/skills')\n"
-            "async def register_skill(item: SkillItem):\n"
-            "    return {'status': 'success', 'data': item.dict()}\n"
-            "```\n\n"
-            "**Key Architecture Highlights:**\n"
-            "1. **Type Safety:** Pydantic schemas enforce runtime validation.\n"
-            "2. **Non-Blocking I/O:** `async def` handles concurrent connections smoothly.\n"
-            "3. **Automatic Docs:** Swagger UI is auto-generated at `/docs`."
-        )
-
-    # React & Frontend
-    if any(has_word(k) for k in ["react", "frontend", "javascript", "js", "typescript", "ts", "css", "tailwind", "vite", "next", "jsx", "tsx"]):
-        return (
-            "⚡ **React & Modern Frontend Solution:**\n\n"
-            "```jsx\n"
-            "import React, { useState, useEffect, useCallback } from 'react';\n\n"
-            "export default function DataFetcher({ endpoint }) {\n"
-            "  const [data, setData] = useState(null);\n"
-            "  const [loading, setLoading] = useState(true);\n\n"
-            "  const fetchData = useCallback(async () => {\n"
-            "    try {\n"
-            "      const res = await fetch(endpoint);\n"
-            "      const result = await res.json();\n"
-            "      setData(result);\n"
-            "    } finally {\n"
-            "      setLoading(false);\n"
-            "    }\n"
-            "  }, [endpoint]);\n\n"
-            "  useEffect(() => {\n"
-            "    fetchData();\n"
-            "  }, [fetchData]);\n\n"
-            "  if (loading) return <div className=\"animate-pulse text-slate-400\">Loading...</div>;\n"
-            "  return <pre className=\"p-4 bg-slate-900 rounded-xl text-emerald-400\">{JSON.stringify(data, null, 2)}</pre>;\n"
-            "}\n"
-            "```\n\n"
-            "**Best Practices:**\n"
-            "- Wrap handlers in `useCallback` to prevent re-creation on render.\n"
-            "- Handle loading & error UI explicitly."
-        )
-
-    # ML / AI (using word boundaries so "explain" does NOT match "ai"!)
-    if any(has_word(k) for k in ["ml", "ai", "pytorch", "tensorflow", "transformer", "llm", "rag", "neural"]):
-        return (
-            "🎯 **Deep Learning & PyTorch Tensor Pipeline:**\n\n"
-            "```python\n"
-            "import torch\n"
-            "import torch.nn as nn\n\n"
-            "# Modular Neural Network Block\n"
-            "class ResidualBlock(nn.Module):\n"
-            "    def __init__(self, channels):\n"
-            "        super().__init__()\n"
-            "        self.conv = nn.Sequential(\n"
-            "            nn.Conv2d(channels, channels, kernel_size=3, padding=1),\n"
-            "            nn.BatchNorm2d(channels),\n"
-            "            nn.ReLU(),\n"
-            "            nn.Conv2d(channels, channels, kernel_size=3, padding=1),\n"
-            "            nn.BatchNorm2d(channels)\n"
-            "        )\n"
-            "        self.relu = nn.ReLU()\n\n"
-            "    def forward(self, x):\n"
-            "        return self.relu(x + self.conv(x))\n"
-            "```\n\n"
-            "**ML Architecture Insights:**\n"
-            "- **Skip Connections:** Mitigates vanishing gradient in deep models.\n"
-            "- **Batch Normalization:** Stabilizes distribution shifts during training."
-        )
-
-    # System Design
-    if any(has_word(k) for k in ["system design", "microservice", "architecture", "scale", "redis", "kafka", "database", "sql", "nosql", "postgres"]):
-        return (
-            "🏗️ **System Design & Distributed Architecture:**\n\n"
-            "1. **Read/Write Decoupling:**\n"
-            "   - Use **Redis** in front of PostgreSQL as a read-through cache (TTL 5 mins).\n"
-            "2. **Event-Driven Pipeline:**\n"
-            "   - Publish state events to **Kafka** / RabbitMQ queues for async processing.\n"
-            "3. **Database Sharding & Indexing:**\n"
-            "   - Use composite B-Tree indexes on `(user_id, created_at)` for sub-10ms range queries.\n"
-            "4. **API Gateway:**\n"
-            "   - Deploy NGINX or Envoy with Token Bucket rate limiting."
-        )
-
-    # Well-Being
-    if any(has_word(k) for k in ["tired", "exhaust", "burnout", "stress", "anxious", "rest", "sleep", "break", "fatigue", "guardian"]):
-        return (
-            "🌿 **Well-Being & Recovery Protocol:**\n\n"
-            "1. **Cognitive Reset:** 10-minute non-screen break to flush cortical strain.\n"
-            "2. **Box Breathing:** Inhale 4s, Hold 4s, Exhale 4s, Hold 4s (repeat 4 cycles).\n"
-            "3. **Hydration & Visuals:** Drink 300ml water and apply 20-20-20 visual rest."
-        )
-
-    # Focus
-    if any(has_word(k) for k in ["focus", "sprint", "habit", "pomodoro", "work"]):
-        return (
-            "🔥 **Deep Work Sprint Protocol:**\n\n"
-            "- **Sprint Duration:** 50 minutes uninterrupted focus + 10 minutes recovery.\n"
-            "- **Environment:** Zero phone notifications, single tab open.\n"
-            "- **Goal:** Deliver one core sub-feature milestone."
-        )
-
-    return (
-        f"🧠 **Direct Guidance on \"{user_msg}\":**\n\n"
-        f"1. **Core Concept:** Breakdown \"{user_msg}\" into fundamental principles, practical execution, and edge-case optimization.\n"
-        "2. **Practical Step:** Draft a minimal working snippet or summary outline in a 25-minute focus session.\n"
-        "3. **Verification:** Test your implementation and track progress in your **Journey Map**.\n\n"
-        "Ask if you'd like a complete code example or architecture diagram for a specific language!"
-    )
+    return context
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -520,42 +348,27 @@ async def chat(req: ChatRequest):
     """Chatbot endpoint — powered by Gemini 2.0 Flash / 1.5 Flash."""
     user_id = req.user_id or "usr_default"
 
-    raw_message = (req.message or "").strip()
-    persona_tag = ""
-    clean_message = raw_message
-
-    if raw_message.startswith("[") and "]" in raw_message:
-        parts = raw_message.split("]", 1)
-        persona_tag = parts[0].strip("[]")
-        clean_message = parts[1].strip()
-
+    # Get user profile context to guide the user towards their goal
     profile_context = _get_user_profile_context(user_id)
 
-    history_lines = []
-    for m in req.history[-6:]:
-        role_label = "User" if m.get("role") == "user" else "Synapse AI"
-        text_content = m.get("text") or m.get("content") or ""
-        if text_content.startswith("[") and "]" in text_content:
-            text_content = text_content.split("]", 1)[1].strip()
-        history_lines.append(f"{role_label}: {text_content}")
-
-    context = "\n".join(history_lines)
-
-    persona_instruction = f"Current Persona Role: {persona_tag}\n" if persona_tag else ""
-
-    prompt = f"{CHAT_SYSTEM_PROMPT}\n\n{persona_instruction}{profile_context}\n\n"
+    context = "\n".join(
+        f"{'User' if m.get('role') == 'user' else 'Synapse AI'}: {m.get('text') or m.get('content', '')}"
+        for m in req.history[-6:]
+    )
+    prompt = f"{CHAT_SYSTEM_PROMPT}\n\n{profile_context}\n\n"
     if context:
-        prompt += f"Recent Conversation History:\n{context}\n\n"
-    prompt += f"User Question: {clean_message}\n\nSynapse AI (Direct, accurate answer):"
+        prompt += f"Conversation context:\n{context}\n\n"
+    prompt += f"User: {req.message}\nSynapse AI:"
 
     reply_text = _generate_gemini(prompt)
 
     if not reply_text:
-        reply_text = _generate_smart_fallback(clean_message, user_id)
+        reply_text = "Synapse AI is operating in offline mode. Please add your free GEMINI_API_KEY to backend/.env (GEMINI_API_KEY=AIzaSy...) or root .env to unlock live Gemini responses."
+        suggestions = ["Where do I get a free API key?", "How do I set backend/.env?", "What can Synapse AI do?"]
+    else:
+        suggestions = _build_suggestions(req.message)
 
-    suggestions = _build_suggestions(clean_message)
-
-    _record_chat_message(user_id, "user", raw_message)
+    _record_chat_message(user_id, "user", req.message)
     _record_chat_message(user_id, "assistant", reply_text, suggestions)
 
     return ChatResponse(reply=reply_text, suggestions=suggestions)
@@ -611,7 +424,7 @@ def _record_chat_message(user_id: str, role: str, text: str, suggestions: List[s
 
 @app.post("/api/recommend", response_model=RecommendationResponse)
 async def recommend(req: GoalRequest):
-    """ML Content Curation — returns 4 items (3 Videos + 1 Article) for a goal."""
+    """ML Content Curation — returns 4 items (Video, Short, Reel, Article) for a goal."""
     intent = _analyze_intent(req.goal)
     user_id = req.user_id or "usr_default"
     failed_concepts = _get_failed_concepts(user_id)
@@ -639,21 +452,23 @@ You are an expert learning curator AI. A user has stated this goal: "{goal}"
 {gap_instruction}
 
 Return ONLY a valid JSON array with exactly 4 objects. No markdown, no extra text. Each object:
-- "type": either "video" or "article" ONLY
-- "title": descriptive title (max 10 words)
-- "youtube_id": REAL 11-char YouTube video ID (empty string "" for articles ONLY)
+- "type": one of "video", "podcast", "speech", "article"
+- "content_type": same as type ("video", "podcast", "speech", "article")
+- "title": descriptive title (for speech, make this an inspiring quote)
+- "youtube_id": REAL 11-char YouTube video ID (empty string "" for non-videos)
 - "url": full URL to the resource
-- "duration": e.g. "12 min" or "8 min read"
+- "source_url": direct URL to media (for podcast, use "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3")
+- "thumbnail_url": URL to cover image (optional)
+- "duration": e.g. "12 min" or "60 sec" or "8 min read"
 - "reason": one sentence starting with "Why: " explaining relevance to the goal
 - "signal_score": integer 90-99
 - "is_gap_fix": boolean (true if this card specifically targets the failed concepts/blind spots, false otherwise)
 
 Rules:
-1. Item 1 = type "video" — foundational full tutorial (10-30 min)
-2. Item 2 = type "video" — practical hands-on project tutorial (10-20 min)
-3. Item 3 = type "video" — advanced concept or career tips (8-20 min)
-4. Item 4 = type "article" — high-quality written guide (youtube_id must be "")
-All 3 videos MUST have real, working, embeddable 11-char YouTube IDs from major channels (Traversy Media, Fireship, freeCodeCamp, TechWorld with Nana, Andrej Karpathy, NetworkChuck, etc.).
+1. Item 1 = type "podcast" (30-60 min deep dive discussion)
+2. Item 2 = type "speech" (motivational or educational keynote)
+3. Item 3 = type "video" (5-20 min full YouTube tutorial)
+4. Item 4 = type "article" (high-quality article, youtube_id must be "")
 Return ONLY the JSON array.
 """.strip()
 
@@ -686,25 +501,137 @@ def _static_recommendations(goal: str, failed_concepts: List[str] = []) -> List[
     
     if any(k in g for k in ["react", "hooks", "frontend", "javascript"]):
         return [
-            ContentItem(type="video",   title="React useEffect Full Deep Dive",            youtube_id="SqcY0GlETPk", url="https://www.youtube.com/watch?v=SqcY0GlETPk", duration="14 min",   reason="Why: Covers every edge-case of useEffect memory leaks directly aligned with your goal.", signal_score=98),
-            ContentItem(type="video",   title="React Crash Course 2024 – Traversy Media",  youtube_id="w7ejDZ8SWv8", url="https://www.youtube.com/watch?v=w7ejDZ8SWv8", duration="60 min",   reason="Why: Comprehensive end-to-end React tutorial — builds real project skills fast.",        signal_score=97),
-            ContentItem(type="video",   title="JavaScript Full Course for Beginners",       youtube_id="PkZNo7MFNFg", url="https://www.youtube.com/watch?v=PkZNo7MFNFg", duration="3.5 hr",  reason="Why: Foundational JS mastery is required to write clean React code.",                  signal_score=96),
-            ContentItem(type="article", title="A Complete Guide to useEffect – Overreacted", youtube_id="",           url="https://overreacted.io/a-complete-guide-to-useeffect/", duration="8 min read", reason="Why: The gold standard deep-dive article — foundational mental model.", signal_score=94),
+            ContentItem(
+                type="podcast",
+                content_type="podcast",
+                title=f"React Architecture Podcast{concepts_str}",
+                youtube_id="",
+                url="https://react.dev",
+                source_url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+                thumbnail_url="https://images.unsplash.com/photo-1590602847861-f357a9332bbc?auto=format&fit=crop&q=80&w=200",
+                duration="45 min",
+                reason=f"Why: Targeted review for your struggle with {', '.join(failed_concepts)}." if is_gap else "Why: Deep dive discussion on complex state management in React apps.",
+                signal_score=98,
+                is_gap_fix=is_gap
+            ),
+            ContentItem(
+                type="speech",
+                content_type="speech",
+                title="The future belongs to those who learn more skills and combine them in creative ways.",
+                youtube_id="",
+                url="#",
+                duration="5 min read",
+                reason="Why: A motivational reminder to push through the frustration of learning complex state paradigms.",
+                signal_score=96,
+                is_gap_fix=False
+            ),
+            ContentItem(
+                type="reel",
+                title="React Reconciler Algorithm Visualised",
+                youtube_id="TNhaISOUy6Q",
+                url="https://www.youtube.com/watch?v=TNhaISOUy6Q",
+                duration="45 sec",
+                reason="Why: High-retention animation of React diffing — low cognitive load.",
+                signal_score=95,
+                is_gap_fix=False
+            ),
+            ContentItem(
+                type="article",
+                title=f"React State Management & Hooks Guide",
+                youtube_id="",
+                url="https://overreacted.io/a-complete-guide-to-useeffect/",
+                duration="8 min read",
+                reason=f"Why: Hand-picked to address your knowledge gap in {', '.join(failed_concepts)}." if is_gap else "Why: The gold standard deep-dive article — foundational mental model.",
+                signal_score=94,
+                is_gap_fix=is_gap
+            ),
         ]
         
     if any(k in g for k in ["machine learning", "ml", "neural", "python", "ai", "deep learning"]):
         return [
-            ContentItem(type="video",   title="Neural Networks from Scratch – Karpathy",    youtube_id="VMj-3S1tku0", url="https://www.youtube.com/watch?v=VMj-3S1tku0", duration="25 min",   reason="Why: World-class backpropagation walkthrough from Andrej Karpathy.",               signal_score=98),
-            ContentItem(type="video",   title="Machine Learning Full Course – StatQuest",   youtube_id="Gv9_4yMHFhI", url="https://www.youtube.com/watch?v=Gv9_4yMHFhI", duration="3.9 hr",  reason="Why: Clear, comprehensive ML foundations with visual explanations.",               signal_score=97),
-            ContentItem(type="video",   title="Deep Learning Crash Course – freeCodeCamp",  youtube_id="VyWAvY2CF9c", url="https://www.youtube.com/watch?v=VyWAvY2CF9c", duration="2.8 hr",  reason="Why: Hands-on deep learning with TensorFlow, perfect for your AI goal.",           signal_score=96),
-            ContentItem(type="article", title="The Illustrated Transformer – Jay Alammar",  youtube_id="",           url="https://jalammar.github.io/illustrated-transformer/", duration="12 min read", reason="Why: The best single article for understanding attention mechanisms.", signal_score=94),
+            ContentItem(
+                type="video",
+                title=f"Neural Networks from Scratch{concepts_str} – Karpathy",
+                youtube_id="VMj-3S1tku0",
+                url="https://www.youtube.com/watch?v=VMj-3S1tku0",
+                duration="25 min",
+                reason=f"Why: World-class backpropagation walkthrough targeted for your struggle with {', '.join(failed_concepts)}." if is_gap else "Why: World-class backpropagation walkthrough from Andrej Karpathy — ideal for your ML goal.",
+                signal_score=98,
+                is_gap_fix=is_gap
+            ),
+            ContentItem(
+                type="short",
+                title="Gradient Descent in 60 Seconds",
+                youtube_id="IHZwWFHWa-w",
+                url="https://www.youtube.com/shorts/IHZwWFHWa-w",
+                duration="60 sec",
+                reason="Why: Instant gradient descent mental model — quick review before deeper practice.",
+                signal_score=96,
+                is_gap_fix=False
+            ),
+            ContentItem(
+                type="reel",
+                title="How a Neural Network Learns (Animated)",
+                youtube_id="aircAruvnKk",
+                url="https://www.youtube.com/watch?v=aircAruvnKk",
+                duration="45 sec",
+                reason="Why: Stunning visual of neural net weight updates — excellent visual recall.",
+                signal_score=95,
+                is_gap_fix=False
+            ),
+            ContentItem(
+                type="article",
+                title=f"Attention mechanisms & Transformers Guide",
+                youtube_id="",
+                url="https://jalammar.github.io/illustrated-transformer/",
+                duration="12 min read",
+                reason=f"Why: The best single article for understanding attention mechanisms, targeting {', '.join(failed_concepts)}." if is_gap else "Why: The best single article for understanding attention mechanisms.",
+                signal_score=94,
+                is_gap_fix=is_gap
+            ),
         ]
         
     return [
-        ContentItem(type="video",   title="Deep Work – Achieve Peak Performance",          youtube_id="gTaJhjQHcf8", url="https://www.youtube.com/watch?v=gTaJhjQHcf8", duration="14 min",  reason="Why: Cal Newport deep work framework — directly boosts ability to reach your goal.", signal_score=98),
-        ContentItem(type="video",   title="The Complete Developer Roadmap 2024",           youtube_id="ysEN5RaKOlA", url="https://www.youtube.com/watch?v=ysEN5RaKOlA", duration="18 min",  reason="Why: Structured career path guide — understand what to learn and in which order.",   signal_score=97),
-        ContentItem(type="video",   title="Build Projects to Get Hired as a Developer",    youtube_id="QkOCbt_o2HY", url="https://www.youtube.com/watch?v=QkOCbt_o2HY", duration="12 min",  reason="Why: Portfolio-building strategy to convert learning into career outcomes.",         signal_score=96),
-        ContentItem(type="article", title="The Feynman Technique – Learn Anything",        youtube_id="",           url="https://fs.blog/feynman-technique/", duration="6 min read", reason="Why: The best learning strategy — explains through teaching to lock in understanding.", signal_score=94),
+        ContentItem(
+            type="video",
+            title=f"Deep Work – Achieve Peak Performance{concepts_str}",
+            youtube_id="gTaJhjQHcf8",
+            url="https://www.youtube.com/watch?v=gTaJhjQHcf8",
+            duration="14 min",
+            reason=f"Why: Cal Newport deep work framework targeted for your struggle with {', '.join(failed_concepts)}." if is_gap else "Why: Cal Newport deep work framework — directly boosts ability to reach your goal.",
+            signal_score=98,
+            is_gap_fix=is_gap
+        ),
+        ContentItem(
+            type="short",
+            title="The 5-Second Rule in 60 Seconds",
+            youtube_id="k2TaFVANNTg",
+            url="https://www.youtube.com/shorts/k2TaFVANNTg",
+            duration="60 sec",
+            reason="Why: Instant motivation trigger — activates momentum toward your goal.",
+            signal_score=96,
+            is_gap_fix=False
+        ),
+        ContentItem(
+            type="reel",
+            title="Flow State Activation – Get Deep Focus",
+            youtube_id="QkOCbt_o2HY",
+            url="https://www.youtube.com/watch?v=QkOCbt_o2HY",
+            duration="45 sec",
+            reason="Why: Primes your brain for high-yield learning sessions.",
+            signal_score=95,
+            is_gap_fix=False
+        ),
+        ContentItem(
+            type="article",
+            title="The Feynman Technique – Learn Anything",
+            youtube_id="",
+            url="https://fs.blog/feynman-technique/",
+            duration="6 min read",
+            reason=f"Why: Explains through teaching to lock in understanding, targeting your struggle with {', '.join(failed_concepts)}." if is_gap else "Why: The best learning strategy — explains through teaching to lock in understanding.",
+            signal_score=94,
+            is_gap_fix=is_gap
+        ),
     ]
 
 
@@ -1518,33 +1445,12 @@ def _build_suggestions(prompt: str) -> List[str]:
         return ["View sleep protocol", "Log energy baseline", "Start recovery sprint"]
     return ["Analyse my aspiration gap", "Generate a focus sprint", "Curate 4 resources"]
 
-class TutorRequest(BaseModel):
-    topic: str
 
 @app.get("/")
-def read_root():
-    return {"status": "online", "message": "Personal Wellbeing AI Backend is running successfully."}
-
-@app.post("/api/tutor")
-def ai_tutor(req: TutorRequest):
-    topic_name = req.topic.strip()
-    
-    if not topic_name:
-        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
-    
-    # Dynamically injects whatever topic you type into the response text
-    explanation = (
-        f"### Breakdown of **{topic_name}**\n\n"
-        f"1. **Core Definition**: {topic_name} is a powerful technology/concept used to build scalable systems, write efficient logic, and solve computational problems.\n"
-        f"2. **Key Components**: \n"
-        f"   - Syntax, structure, and foundational rules of {topic_name}.\n"
-        f"   - Best practices for writing clean and maintainable code.\n"
-        f"   - Common debugging patterns and performance optimization.\n"
-        f"3. **Practical Application**: You use {topic_name} when developing robust software solutions, managing data structures, or structuring application logic from scratch."
-    )
-    
+async def root():
     return {
-        "success": True,
-        "topic": topic_name,
-        "explanation": explanation
+        "status": "Synapse AI FastAPI Backend Engine is running ✅",
+        "gemini": "connected" if gemini_configured else "offline (add GEMINI_API_KEY to backend/.env)",
+        "supabase": "connected" if supabase_client else "offline (using FastAPI in-memory fallback store)",
+        "docs": "http://localhost:8000/docs"
     }
