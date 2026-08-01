@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Home, 
   Clock, 
@@ -30,10 +30,20 @@ import {
   Star,
   Activity,
   TrendingUp,
-  ShieldCheck
+  ShieldCheck,
+  Database,
+  LogOut
 } from 'lucide-react';
+import { 
+  fetchChatHistoryFromSupabase, 
+  saveChatMessageToSupabase, 
+  clearChatHistoryInSupabase, 
+  saveReflectionToSupabase,
+  supabase
+} from '../lib/supabaseClient';
+import { generateAIResponse } from '../lib/aiService';
 
-export default function AppLayout() {
+export default function AppLayout({ currentUser, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showReflection, setShowReflection] = useState(false);
@@ -41,6 +51,10 @@ export default function AppLayout() {
   const [showAIChatInterface, setShowAIChatInterface] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   
+  // Dynamic user data from Auth
+  const userName = currentUser?.name || 'Atharva Sur';
+  const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'AS';
+
   // Reflection Modal States
   const [reflectionText, setReflectionText] = useState('');
   const [reflectionMood, setReflectionMood] = useState('focused');
@@ -51,7 +65,7 @@ export default function AppLayout() {
     { 
       id: 1, 
       role: 'assistant', 
-      text: "Greetings Atharva. I am your Synapse AI Growth Architect. I monitor your identity graph node decay, habit velocities, and focus blocks. How can I assist your progression today?",
+      text: `Greetings ${userName}. I am your Synapse AI Growth Architect powered by Google Gemini and Supabase PostgreSQL. How can I assist your progression today?`,
       suggestions: ["Analyze My Aspiration Gap", "Generate 60-Sec Focus Sprint", "Simulate 5-Year Trajectory"]
     }
   ]);
@@ -64,6 +78,22 @@ export default function AppLayout() {
     { id: 2, text: "Take 1-minute box breath check", completed: true },
     { id: 3, text: "Audit component render profilers", completed: false }
   ]);
+
+  // Load chat history from Supabase if connected
+  useEffect(() => {
+    async function loadHistory() {
+      const history = await fetchChatHistoryFromSupabase();
+      if (history && history.length > 0) {
+        setAiInterfaceMessages(history.map(item => ({
+          id: item.id,
+          role: item.role,
+          text: item.text,
+          suggestions: item.suggestions || []
+        })));
+      }
+    }
+    loadHistory();
+  }, []);
 
   // Achievements & Badges Data
   const achievements = [
@@ -136,41 +166,54 @@ export default function AppLayout() {
     { id: 3, text: "Restorative Box Breathing recommended (High Fatigue)", time: "3h ago", read: true }
   ];
 
-  const handleSendAiInterface = (queryText) => {
+  const handleSendAiInterface = async (queryText) => {
     const textToSend = queryText || aiInputText;
     if (!textToSend.trim()) return;
 
-    const newMsg = { id: Date.now(), role: 'user', text: textToSend };
-    setAiInterfaceMessages(prev => [...prev, newMsg]);
+    const userMsg = { id: Date.now(), role: 'user', text: textToSend };
+    setAiInterfaceMessages(prev => [...prev, userMsg]);
     setAiInputText('');
     setIsAiThinking(true);
 
-    setTimeout(() => {
-      let aiResponseText = "I've compiled that request. Node weights for 'Deep Learning' and 'React Performance' have been updated to optimum priority.";
-      let suggestions = ["View Graph Updates", "Add Sprint to Goal Roadmap"];
+    // Save User message to Supabase PostgreSQL
+    saveChatMessageToSupabase('user', textToSend);
 
-      if (textToSend.includes("Aspiration Gap") || textToSend.includes("Analyze")) {
-        aiResponseText = "Aspiration Gap Analysis Complete: You are currently at an 86% match for target Senior AI Architect benchmarks. Primary bottleneck detected: 14% gap in distributed matrix multiplication.";
-        suggestions = ["Generate 20-Min Deep Focus Plan", "Set Daily Reminder"];
-      } else if (textToSend.includes("Sprint") || textToSend.includes("Focus")) {
-        aiResponseText = "60-Second Focus Sprint Initiated! Step 1: Open your code editor. Step 2: Minimize browser tabs. Step 3: Execute 3 deep belly breaths.";
-        suggestions = ["Mark Sprint Complete", "Log Fatigue Baseline"];
-      } else if (textToSend.includes("Trajectory")) {
-        aiResponseText = "Trajectory Simulation: Continuing daily 45-min focus blocks will yield a 3.4x learning acceleration over passive browsing over the next 180 days.";
-        suggestions = ["Lock Trajectory Target", "Export Growth Report"];
-      }
+    // Call live AI Service (Gemini API / Fallback compiler)
+    const result = await generateAIResponse(textToSend, aiInterfaceMessages);
 
-      setAiInterfaceMessages(prev => [
-        ...prev, 
-        { id: Date.now() + 1, role: 'assistant', text: aiResponseText, suggestions }
-      ]);
-      setIsAiThinking(false);
-    }, 1200);
+    const aiMsg = { 
+      id: Date.now() + 1, 
+      role: 'assistant', 
+      text: result.text, 
+      suggestions: result.suggestions 
+    };
+
+    setAiInterfaceMessages(prev => [...prev, aiMsg]);
+    setIsAiThinking(false);
+
+    // Save Assistant response to Supabase PostgreSQL
+    saveChatMessageToSupabase('assistant', result.text, result.suggestions);
   };
 
-  const handleSaveReflection = (e) => {
+  const handleClearThread = async () => {
+    setAiInterfaceMessages([
+      { 
+        id: 1, 
+        role: 'assistant', 
+        text: "Conversation thread cleared. How can I guide your next growth session?",
+        suggestions: ["Analyze My Aspiration Gap", "Generate 60-Sec Focus Sprint", "Simulate 5-Year Trajectory"]
+      }
+    ]);
+    await clearChatHistoryInSupabase();
+  };
+
+  const handleSaveReflection = async (e) => {
     e.preventDefault();
     setReflectionSaved(true);
+    
+    // Save Reflection to Supabase PostgreSQL
+    await saveReflectionToSupabase(reflectionMood, reflectionText);
+
     setTimeout(() => {
       setShowReflection(false);
       setReflectionSaved(false);
@@ -271,23 +314,35 @@ export default function AppLayout() {
         </div>
 
         {/* User Profile Pill at Bottom */}
-        <div className={`p-3 rounded-2xl border shadow-sm flex items-center gap-3 transition-opacity duration-300 ${
+        <div className={`p-3 rounded-2xl border shadow-sm flex items-center justify-between transition-opacity duration-300 ${
           isDarkMode 
             ? 'bg-slate-900/90 border-slate-800 text-slate-100' 
             : 'bg-white/80 border-stone-200/50 text-stone-900'
-        } ${sidebarCollapsed ? 'justify-center' : ''}`}>
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white text-xs shadow-sm shrink-0 ${
-            isDarkMode 
-              ? 'bg-gradient-to-tr from-indigo-500 to-violet-500' 
-              : 'bg-gradient-to-tr from-teal-400 to-cyan-500'
-          }`}>
-            AS
-          </div>
-          {!sidebarCollapsed && (
-            <div className="animate-fade-in overflow-hidden">
-              <h4 className={`text-xs font-bold truncate ${isDarkMode ? 'text-slate-100' : 'text-stone-900'}`}>Atharva Sur</h4>
-              <p className={`text-[10px] font-medium truncate ${isDarkMode ? 'text-slate-400' : 'text-stone-400'}`}>Growth Catalyst</p>
+        }`}>
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white text-xs shadow-sm shrink-0 ${
+              isDarkMode 
+                ? 'bg-gradient-to-tr from-indigo-500 to-violet-500' 
+                : 'bg-gradient-to-tr from-teal-400 to-cyan-500'
+            }`}>
+              {userInitials}
             </div>
+            {!sidebarCollapsed && (
+              <div className="animate-fade-in overflow-hidden">
+                <h4 className={`text-xs font-bold truncate ${isDarkMode ? 'text-slate-100' : 'text-stone-900'}`}>{userName}</h4>
+                <p className={`text-[10px] font-medium truncate ${isDarkMode ? 'text-slate-400' : 'text-stone-400'}`}>Growth Catalyst</p>
+              </div>
+            )}
+          </div>
+
+          {!sidebarCollapsed && onLogout && (
+            <button
+              onClick={onLogout}
+              className="p-1.5 rounded-lg hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 transition cursor-pointer"
+              title="Log Out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           )}
         </div>
       </aside>
@@ -301,7 +356,7 @@ export default function AppLayout() {
         
         {/* Top Header */}
         <header className="p-6 md:px-10 flex justify-between items-center shrink-0 z-10">
-          <div>
+          <div className="flex items-center gap-3">
             <span className={`text-xs font-extrabold tracking-widest font-mono uppercase ${
               isDarkMode ? 'text-slate-500' : 'text-stone-400'
             }`}>
@@ -310,6 +365,16 @@ export default function AppLayout() {
               {activeMenu === 'focus' && 'FOCUS ROOM'}
               {activeMenu === 'journey' && 'JOURNEY MAP'}
             </span>
+
+            {/* Supabase connection indicator badge */}
+            <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-mono font-bold ${
+              supabase 
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' 
+                : 'bg-stone-500/10 border-stone-500/20 text-stone-400'
+            }`}>
+              <Database className="w-3 h-3" />
+              <span>{supabase ? 'SUPABASE POSTGRES: CONNECTED' : 'SUPABASE: DEMO MODE'}</span>
+            </div>
           </div>
 
           {/* Top Right Action Icons & Dark Mode Toggle Switch */}
@@ -421,7 +486,7 @@ export default function AppLayout() {
                         ? 'bg-gradient-to-r from-indigo-400 via-violet-400 to-teal-300' 
                         : 'bg-gradient-to-r from-teal-400 to-cyan-500'
                     }`}>
-                      Atharva
+                      {userName}
                     </span>
                   </h1>
                   <p className={`text-sm md:text-base max-w-xl leading-relaxed mt-1 ${
@@ -636,11 +701,11 @@ export default function AppLayout() {
                     <div className={`w-20 h-20 rounded-3xl flex items-center justify-center font-black text-2xl text-white shadow-md ${
                       isDarkMode ? 'bg-gradient-to-tr from-indigo-500 to-violet-600' : 'bg-gradient-to-tr from-teal-400 to-cyan-500'
                     }`}>
-                      AS
+                      {userInitials}
                     </div>
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-3">
-                        <h2 className={`text-2xl font-black ${isDarkMode ? 'text-white' : 'text-stone-900'}`}>Atharva Sur</h2>
+                        <h2 className={`text-2xl font-black ${isDarkMode ? 'text-white' : 'text-stone-900'}`}>{userName}</h2>
                         <span className={`px-3 py-0.5 rounded-full text-xs font-bold border ${
                           isDarkMode ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30' : 'bg-teal-50 text-teal-700 border-teal-100'
                         }`}>
@@ -679,7 +744,7 @@ export default function AppLayout() {
                   </div>
                 </div>
 
-                {/* 3-STAGE TRAJECTORY PIPELINE (Where You Were ➔ Where You Are ➔ Where You Want To Be) */}
+                {/* 3-STAGE TRAJECTORY PIPELINE */}
                 <div className="flex flex-col gap-4">
                   <div className="flex items-center justify-between">
                     <div>
@@ -693,7 +758,6 @@ export default function AppLayout() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    
                     {/* Stage 1: Where You Were Before */}
                     <div className={`rounded-3xl p-6 border flex flex-col justify-between gap-6 transition relative ${
                       isDarkMode 
@@ -822,7 +886,6 @@ export default function AppLayout() {
                         Mastery of distributed neural systems & deep flow.
                       </div>
                     </div>
-
                   </div>
                 </div>
 
@@ -996,14 +1059,7 @@ export default function AppLayout() {
 
             <div className="flex items-center gap-3">
               <button 
-                onClick={() => setAiInterfaceMessages([
-                  { 
-                    id: 1, 
-                    role: 'assistant', 
-                    text: "Conversation thread cleared. How can I guide your next growth session?",
-                    suggestions: ["Analyze My Aspiration Gap", "Generate 60-Sec Focus Sprint", "Simulate 5-Year Trajectory"]
-                  }
-                ])}
+                onClick={handleClearThread}
                 className={`px-3.5 py-2 rounded-2xl border text-xs font-bold flex items-center gap-2 shadow-2xs transition cursor-pointer ${
                   isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white' : 'bg-white border-stone-200/80 text-stone-600 hover:text-stone-900'
                 }`}
