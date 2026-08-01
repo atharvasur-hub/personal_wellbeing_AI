@@ -17,21 +17,20 @@ API DOCS:
 """
 
 import os
-try:
-    import google.generativeai as genai
-except ImportError:
-    genai = None
-
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import json
 import time
 from typing import Optional, List, Dict, Any
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-import google.generativeai as genai
+import urllib.request
+import sqlite3
+
+try:
+    from google import genai
+except ImportError:
+    genai = None
 
 # ── Load environment variables ────────────────────────────────
 from dotenv import load_dotenv, find_dotenv
@@ -39,65 +38,42 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(usecwd=True))
 
 GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or "").strip()
+gemini_client = None
 if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_API_KEY_HERE" and genai:
-    genai.configure(api_key=GEMINI_API_KEY)
+    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 SUPABASE_URL   = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY   = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_ANON_KEY", "")
 
 # ── Configure Gemini Multi-Model Generator ─────────────────────
-import urllib.request
-
 def _generate_gemini(prompt: str) -> str:
-    """Configures and attempts Gemini API calls across multiple Flash/Pro models with REST fallback."""
+    """Fresh clean implementation using new google-genai SDK or direct REST fallback."""
     key = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or "").strip().replace('"', '').replace("'", "")
     if not key or key == "YOUR_GEMINI_API_KEY_HERE":
         return ""
 
-    candidate_models = [
-        "gemini-2.0-flash",
-        "gemini-2.5-flash",
-        "gemini-2.5-pro",
-        "gemini-flash-latest",
-        "gemini-pro-latest",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
-        "models/gemini-2.0-flash",
-        "models/gemini-2.5-flash"
-    ]
-
-    # 1. Try Google SDK genai
-    if genai:
+    # 1. New Google GenAI SDK approach
+    if gemini_client:
         try:
-            genai.configure(api_key=key)
-            for model_name in candidate_models:
-                try:
-                    m = genai.GenerativeModel(model_name)
-                    res = m.generate_content(prompt)
-                    if res and res.text:
-                        return res.text.strip()
-                except Exception as e:
-                    print(f"[FastAPI Gemini SDK] {model_name} error: {e}")
-                    continue
+            response = gemini_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+            )
+            if response.text:
+                return response.text.strip()
         except Exception as e:
-            print(f"[FastAPI Gemini SDK Config] error: {e}")
+            print(f"[FastAPI Gemini] SDK Error: {e}")
 
-    # 2. Try Direct HTTP REST API endpoint fallback
-    for model_name in ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"]:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={key}"
-            payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
-            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                candidates = data.get("candidates", [])
-                if candidates and "content" in candidates[0]:
-                    parts = candidates[0]["content"].get("parts", [])
-                    if parts and "text" in parts[0]:
-                        return parts[0]["text"].strip()
-        except Exception as e:
-            print(f"[FastAPI Gemini REST] {model_name} REST error: {e}")
-            continue
+    # 2. Clean REST API fallback
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
+        payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception as e:
+        print(f"[FastAPI Gemini] REST Error: {e}")
 
     return ""
 
@@ -2157,4 +2133,3 @@ async def root():
         "supabase": "connected" if supabase_client else "offline (using FastAPI in-memory fallback store)",
         "docs": "http://localhost:8000/docs"
     }
->>>>>>> 32160e0d9b81898bd92554d6ce899aa28b5d789e
