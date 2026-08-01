@@ -15,6 +15,7 @@ import {
 import { fetchAIRecommendations } from '../lib/contentRecommender';
 import AudioPlayer from './AudioPlayer';
 import SpeechCard from './SpeechCard';
+import VideoCard from './VideoCard';
 
 export default function CuratedFeed({ isDarkMode = false, currentUser = null }) {
   const staticFallbackItems = [
@@ -190,6 +191,9 @@ export default function CuratedFeed({ isDarkMode = false, currentUser = null }) 
             }
             if (contentType === 'speech') {
               return <SpeechCard key={index} item={item} isDarkMode={isDarkMode} />;
+            }
+            if (contentType === 'video' || contentType === 'short' || contentType === 'reel') {
+              return <VideoCard key={index} item={item} isDarkMode={isDarkMode} />;
             }
 
             // Choose icon and labels based on media type

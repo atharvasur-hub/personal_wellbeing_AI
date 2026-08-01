@@ -12,7 +12,7 @@ import {
   Lock,
   CloudRain
 } from 'lucide-react';
-import { saveFocusSessionToBackend } from '../lib/backendApi';
+import { saveFocusSessionToBackend, awardPoints } from '../lib/backendApi';
 
 export default function FocusRoom({ isDarkMode = false, currentUser }) {
   // Manual Time Input States (Hours & Minutes)
@@ -156,6 +156,11 @@ export default function FocusRoom({ isDarkMode = false, currentUser }) {
         duration_minutes: Math.round(totalSeconds / 60),
         distractions_blocked: distractionCount
       });
+      
+      // Award Gamification Points (50 pts for focus session)
+      awardPoints('usr_default', 'focus_mode_complete', 50).then(() => {
+        window.dispatchEvent(new CustomEvent('pointsAwarded', { detail: { points: 50 } }));
+      }).catch(console.error);
     }
     return () => clearInterval(interval);
   }, [isActive, isPaused, secondsLeft, totalSeconds, focusTask, currentUser]);
