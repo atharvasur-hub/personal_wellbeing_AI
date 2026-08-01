@@ -41,7 +41,9 @@ const AGENT_PERSONAS = {
   }
 };
 
-// CUSTOM SIMULATED useChat HOOK
+import { sendOllamaChatRequest } from '../../api/chat';
+
+// CUSTOM LIVE / OLLAMA AGENTIC CHAT HOOK
 function useMockChat(activeAgent) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -77,14 +79,15 @@ function useMockChat(activeAgent) {
     ]);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     if (e) e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    const promptText = input.trim();
+    if (!promptText || isLoading) return;
 
     const userMessage = {
       id: Math.random().toString(36).substr(2, 9),
       role: 'user',
-      content: input,
+      content: promptText,
       createdAt: new Date()
     };
 
@@ -92,8 +95,8 @@ function useMockChat(activeAgent) {
     setInput('');
     setIsLoading(true);
 
-    // Pick response content based on query keywords
-    const query = input.toLowerCase();
+    // Default template fallback in case Ollama takes time
+    const query = promptText.toLowerCase();
     let responseTemplate = activeAgent.responses.default;
     
     if (activeAgent.id === 'architect') {
@@ -114,43 +117,64 @@ function useMockChat(activeAgent) {
       }
     }
 
-    // Set a timeout to simulate think time (1s)
-    setTimeout(() => {
-      const assistantMessageId = Math.random().toString(36).substr(2, 9);
+    try {
+      const systemPrompt = {
+        role: 'system',
+        content: `You are ${activeAgent.name}, ${activeAgent.role}. ${activeAgent.tagline} Format your response clearly with markdown bullet points where appropriate.`
+      };
+
+      const historyFormatted = messages.map(m => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: m.content
+      }));
+
+      const chatMessages = [systemPrompt, ...historyFormatted.slice(-4), { role: 'user', content: promptText }];
       
-      // Append an empty assistant message to stream into
-      setMessages(prev => [...prev, {
-        id: assistantMessageId,
-        role: 'assistant',
-        content: '',
-        createdAt: new Date(),
-        agentId: activeAgent.id
-      }]);
+      const ollamaRes = await sendOllamaChatRequest(chatMessages, {
+        model: 'llama3',
+        temperature: 0.7
+      });
 
-      setIsLoading(false);
+      const text = ollamaRes.choices?.[0]?.message?.content;
+      if (text) {
+        responseTemplate = text;
+      }
+    } catch (err) {
+      console.warn('Ollama live agent request fallback:', err.message);
+    }
 
-      // Stream the response word by word
-      const words = responseTemplate.split(' ');
-      let currentWordIndex = 0;
-      let streamedContent = '';
+    const assistantMessageId = Math.random().toString(36).substr(2, 9);
+    setMessages(prev => [...prev, {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      createdAt: new Date(),
+      agentId: activeAgent.id
+    }]);
 
-      if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
+    setIsLoading(false);
 
-      streamIntervalRef.current = setInterval(() => {
-        if (currentWordIndex < words.length) {
-          streamedContent += (currentWordIndex === 0 ? '' : ' ') + words[currentWordIndex];
-          
-          setMessages(prev => prev.map(msg => 
-            msg.id === assistantMessageId 
-              ? { ...msg, content: streamedContent }
-              : msg
-          ));
-          currentWordIndex++;
-        } else {
-          clearInterval(streamIntervalRef.current);
-        }
-      }, 45); // Speed of streaming
-    }, 1200);
+    // Stream the response word by word
+    const words = responseTemplate.split(' ');
+    let currentWordIndex = 0;
+    let streamedContent = '';
+
+    if (streamIntervalRef.current) clearInterval(streamIntervalRef.current);
+
+    streamIntervalRef.current = setInterval(() => {
+      if (currentWordIndex < words.length) {
+        streamedContent += (currentWordIndex === 0 ? '' : ' ') + words[currentWordIndex];
+        
+        setMessages(prev => prev.map(msg => 
+          msg.id === assistantMessageId 
+            ? { ...msg, content: streamedContent }
+            : msg
+        ));
+        currentWordIndex++;
+      } else {
+        clearInterval(streamIntervalRef.current);
+      }
+    }, 35);
   };
 
   // Clean interval on unmount

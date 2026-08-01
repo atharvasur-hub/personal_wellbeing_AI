@@ -1,13 +1,46 @@
 import { GoogleGenAI } from '@google/genai';
+import { sendOllamaChatRequest } from '../../api/chat';
 
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 
 /**
- * Generate a live, contextual AI response using Gemini AI or fallback engine.
+ * Generate a live, contextual AI response using Local Ollama (llama3) or Google Gemini / Fallback engine.
  */
 export async function generateAIResponse(userPrompt, conversationHistory = []) {
-  // If Gemini API Key is configured, use live Google Gemini API
+  // 1. Primary Engine: Local Ollama Provider (http://localhost:11434/v1 with model llama3)
+  try {
+    const formattedHistory = conversationHistory.map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'assistant',
+      content: msg.text || msg.content || ''
+    }));
+
+    const systemMessage = {
+      role: 'system',
+      content: `You are Synapse AI, an elite Growth Architect AI Assistant embedded in Atharva's Personal Wellbeing & Learning Platform. Your tone is supportive, high-tech, precise, and empowering. User is Atharva, a Tier 3 Growth Catalyst focusing on Deep Learning, React Performance, and Circadian Recovery.`
+    };
+
+    const userMessage = {
+      role: 'user',
+      content: userPrompt
+    };
+
+    const messages = [systemMessage, ...formattedHistory.slice(-4), userMessage];
+    const ollamaResponse = await sendOllamaChatRequest(messages, {
+      model: 'llama3',
+      temperature: 0.7
+    });
+
+    const responseText = ollamaResponse.choices?.[0]?.message?.content;
+    if (responseText) {
+      const suggestions = generateDynamicSuggestions(userPrompt);
+      return { text: responseText, suggestions };
+    }
+  } catch (ollamaErr) {
+    console.warn('Local Ollama engine request failed, trying secondary engines:', ollamaErr.message);
+  }
+
+  // 2. Secondary Engine: Google Gemini API (if key configured)
   if (ai) {
     try {
       const response = await ai.models.generateContent({
@@ -25,17 +58,14 @@ export async function generateAIResponse(userPrompt, conversationHistory = []) {
       });
 
       const responseText = response.text || "Synapse AI processed your request. Node weights have been recalibrated for optimal learning acceleration.";
-      
-      // Dynamic suggestion chips generator
       const suggestions = generateDynamicSuggestions(userPrompt);
       return { text: responseText, suggestions };
-
     } catch (err) {
       console.warn('Gemini API call failed, switching to Synapse local fallback engine:', err.message);
     }
   }
 
-  // Fallback intelligent compiler responses for demo / offline operation
+  // 3. Fallback intelligent compiler responses for demo / offline operation
   return generateFallbackResponse(userPrompt);
 }
 
