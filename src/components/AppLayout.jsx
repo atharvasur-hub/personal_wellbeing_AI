@@ -24,7 +24,8 @@ import {
   Bot,
   Send,
   RefreshCw,
-  X
+  X,
+  Users
 } from 'lucide-react';
 import CuratedFeed from './CuratedFeed';
 import AgenticOnboardingFlow from './AgenticOnboardingFlow';
@@ -36,6 +37,7 @@ import UserJourneyTimeline from './UserJourneyTimeline';
 import ProfileVpmDashboard from './ProfileVpmDashboard';
 import Leaderboard from './Leaderboard';
 import PointsBadge from './PointsBadge';
+import CommunitySection from './CommunitySection';
 import {
   fetchChatHistoryFromSupabase,
   saveChatMessageToSupabase,
@@ -393,11 +395,11 @@ export default function AppLayout({ currentUser, onLogout }) {
       item.id === id ? { ...item, completed: !item.completed } : item
     ));
   };
-
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'focus', label: 'Focus Room', icon: Clock },
     { id: 'skills', label: 'Verified Skills', icon: Brain },
+    { id: 'community', label: 'Community Hub', icon: Users },
     { id: 'journey', label: 'Journey Map', icon: Compass },
     { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
     { id: 'profile', label: 'Profile', icon: User }
@@ -490,7 +492,11 @@ export default function AppLayout({ currentUser, onLogout }) {
           ? 'bg-slate-900/90 border-slate-800 text-slate-100'
           : 'bg-white/80 border-stone-200/50 text-stone-900'
           }`}>
-          <div className="flex items-center gap-3 overflow-hidden">
+          <div 
+            onClick={() => setActiveMenu('profile')}
+            className="flex items-center gap-3 overflow-hidden cursor-pointer group/profile hover:opacity-80 transition"
+            title="View Profile Dashboard"
+          >
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white text-xs shadow-sm shrink-0 ${isDarkMode
               ? 'bg-gradient-to-tr from-indigo-500 to-violet-500'
               : 'bg-gradient-to-tr from-teal-400 to-cyan-500'
@@ -499,7 +505,7 @@ export default function AppLayout({ currentUser, onLogout }) {
             </div>
             {!sidebarCollapsed && (
               <div className="animate-fade-in overflow-hidden">
-                <h4 className={`text-xs font-bold truncate ${isDarkMode ? 'text-slate-100' : 'text-stone-900'}`}>{userName}</h4>
+                <h4 className={`text-xs font-bold truncate group-hover/profile:text-teal-500 transition ${isDarkMode ? 'text-slate-100' : 'text-stone-900'}`}>{userName}</h4>
                 <p className={`text-[10px] font-medium truncate ${isDarkMode ? 'text-slate-400' : 'text-stone-400'}`}>{currentUser?.email || 'Logged In'}</p>
               </div>
             )}
@@ -535,6 +541,7 @@ export default function AppLayout({ currentUser, onLogout }) {
               {activeMenu === 'dashboard' && 'GROWTH WORKSPACE'}
               {activeMenu === 'profile' && 'IDENTITY & TRAJECTORY PROFILE'}
               {activeMenu === 'focus' && 'FOCUS ROOM'}
+              {activeMenu === 'community' && 'COHORT COMMUNITY HUB'}
               {activeMenu === 'journey' && 'JOURNEY MAP'}
             </span>
 
@@ -869,6 +876,11 @@ export default function AppLayout({ currentUser, onLogout }) {
             {activeMenu === 'skills' && <VerifiedSkillsActiveRecall currentUser={currentUser} isDarkMode={isDarkMode} />}
             {activeMenu === 'journey' && <UserJourneyTimeline currentUser={currentUser} isDarkMode={isDarkMode} />}
             {activeMenu === 'leaderboard' && <Leaderboard isDarkMode={isDarkMode} />}
+
+            {/* COMMUNITY COHORT VIEW */}
+            {activeMenu === 'community' && (
+              <CommunitySection isDarkMode={isDarkMode} currentUser={currentUser} />
+            )}
 
             {/* FULL PROFILE & VPM DASHBOARD VIEW */}
             {activeMenu === 'profile' && (

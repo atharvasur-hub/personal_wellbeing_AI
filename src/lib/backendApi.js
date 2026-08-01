@@ -8,7 +8,9 @@
  * ============================================================
  */
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL !== undefined 
+  ? import.meta.env.VITE_BACKEND_URL 
+  : (import.meta.env.DEV ? 'http://localhost:8000' : '');
 
 // Generic POST fetch wrapper
 async function apiFetch(path, body) {
@@ -225,4 +227,37 @@ export async function fetchLeaderboard() {
 
 export async function fetchUserPoints(userId = 'usr_default') {
   return apiGet(`/api/points/balance?user_id=${encodeURIComponent(userId)}`);
+}
+
+// ── PILLAR 11: Goal-Based Community Cohorts & AI Facilitator ──
+export async function getCommunityGroup(userId = 'usr_default') {
+  return apiGet(`/api/community/group?user_id=${encodeURIComponent(userId)}`);
+}
+
+export async function getCommunityMessages(communityId) {
+  return apiGet(`/api/community/messages?community_id=${encodeURIComponent(communityId)}`);
+}
+
+export async function sendCommunityMessage(communityId, senderId, senderName, text, role = 'user') {
+  return apiFetch('/api/community/messages', {
+    community_id: communityId,
+    sender_id: senderId,
+    sender_name: senderName,
+    text: text,
+    role: role
+  });
+}
+
+export async function triggerCommunityAnnouncement(communityId) {
+  return apiFetch('/api/community/trigger-announcement', {
+    community_id: communityId
+  });
+}
+
+export async function fetchDynamicRoadmapFromBackend(aspiration, topics = [], userId = 'usr_default') {
+  return await apiFetch('/api/roadmap', {
+    user_id: userId,
+    aspiration,
+    topics
+  });
 }

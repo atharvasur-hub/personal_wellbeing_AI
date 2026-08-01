@@ -17,6 +17,14 @@ API DOCS:
 """
 
 import os
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import json
 import time
 from typing import Optional, List, Dict, Any
@@ -27,11 +35,12 @@ import google.generativeai as genai
 
 # ── Load environment variables ────────────────────────────────
 from dotenv import load_dotenv, find_dotenv
+
 load_dotenv(find_dotenv(usecwd=True))
 
 GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or "").strip()
-if GEMINI_API_KEY == "YOUR_GEMINI_API_KEY_HERE":
-    GEMINI_API_KEY = ""
+if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_API_KEY_HERE" and genai:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 SUPABASE_URL   = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY   = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_ANON_KEY", "")
@@ -72,11 +81,6 @@ gemini_configured = bool(GEMINI_API_KEY)
 supabase_client = None
 if SUPABASE_URL and SUPABASE_KEY and "your-supabase" not in SUPABASE_URL:
     try:
-        from supabase import create_client
-        supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-    except Exception as e:
-        print(f"[FastAPI] Supabase init warning: {e}")
-        supabase_client = None
         from supabase import create_client
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
     except Exception as e:
@@ -139,6 +143,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- 1. Database Setup ---
+# This creates a local file named 'users.db' and builds the table if it doesn't exist
+def init_db():
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            email TEXT UNIQUE,
+            password TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS community_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            community_id TEXT,
+            sender_id TEXT,
+            sender_name TEXT,
+            role TEXT,
+            text TEXT,
+            is_announcement INTEGER DEFAULT 0,
+            created_at TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
 
 # ═══════════════════════════════════════════════════════════════
 # PYDANTIC SCHEMAS
@@ -812,6 +843,279 @@ async def analyze_intent(req: GoalRequest):
     return intent
 
 
+class RoadmapRequest(BaseModel):
+    aspiration: Optional[str] = "Senior AI Architect"
+    topics: Optional[List[str]] = []
+    user_id: Optional[str] = "usr_default"
+
+
+def _build_dynamic_roadmap_nodes(aspiration: str, topics: List[str] = None) -> List[dict]:
+    role = (aspiration or "Senior AI Architect").replace("I want to become a ", "").replace("I want to be a ", "").strip()
+    if not role:
+        role = "Senior AI Architect"
+    role_lower = role.lower()
+    
+    # 1. Python / Backend Engineer
+    if any(k in role_lower for k in ["python", "backend", "fastapi", "django"]):
+        return [
+            {
+                "id": "node-1",
+                "title": "Python Async & Type System Foundation",
+                "subtitle": "Phase 1 • Orientation",
+                "type": "Video Tutorial",
+                "duration_mins": 20,
+                "status": "completed",
+                "description": f"Master asyncio event loops, Pydantic schemas, and type hinting for {role} baseline."
+            },
+            {
+                "id": "node-2",
+                "title": "FastAPI REST & Middleware Architecture",
+                "subtitle": "Phase 2 • Focus Sprint Check-in",
+                "type": "Focus Sprint",
+                "duration_mins": 30,
+                "status": "completed",
+                "description": "Build non-blocking REST endpoints with custom CORS, dependency injection, and JWT security."
+            },
+            {
+                "id": "node-3",
+                "title": "PostgreSQL & Supabase Database Optimization",
+                "subtitle": "Phase 3 • Active Journey Node",
+                "type": "Interactive AI Feed",
+                "duration_mins": 25,
+                "status": "active",
+                "description": "Design relational schemas, composite B-tree indexing, and query ORM connection pooling."
+            },
+            {
+                "id": "node-4",
+                "title": "Microservices, Caching & Redis Integration",
+                "subtitle": "Phase 4 • System Architecture",
+                "type": "Deep Dive Article",
+                "duration_mins": 45,
+                "status": "locked",
+                "description": "Implement Redis read-through caching, rate-limiting algorithms, and pub/sub queue patterns."
+            },
+            {
+                "id": "node-5",
+                "title": f"Mastery Verification & {role} Audit",
+                "subtitle": "Phase 5 • Final Calibration",
+                "type": "Performance Audit",
+                "duration_mins": 20,
+                "status": "locked",
+                "description": f"Execute 10/10 node verification audit and benchmark VPM productivity for {role}."
+            }
+        ]
+
+    # 2. React / Frontend Engineer
+    elif any(k in role_lower for k in ["react", "frontend", "javascript", "ui", "ux", "web"]):
+        return [
+            {
+                "id": "node-1",
+                "title": "Modern React & Component Lifecycle Baseline",
+                "subtitle": "Phase 1 • Orientation",
+                "type": "Video Tutorial",
+                "duration_mins": 15,
+                "status": "completed",
+                "description": "Master functional components, props contracts, and strict state immutability."
+            },
+            {
+                "id": "node-2",
+                "title": "State Hygiene & Custom React Hooks",
+                "subtitle": "Phase 2 • Focus Sprint Check-in",
+                "type": "Focus Sprint",
+                "duration_mins": 25,
+                "status": "completed",
+                "description": "Optimize component renders using useCallback, useMemo, and custom reusable hook abstractions."
+            },
+            {
+                "id": "node-3",
+                "title": "Tailwind Design Systems & Glassmorphism UI",
+                "subtitle": "Phase 3 • Active Journey Node",
+                "type": "Interactive AI Feed",
+                "duration_mins": 20,
+                "status": "active",
+                "description": "Build high-signal responsive dashboards with dark modes, CSS grid, and micro-animations."
+            },
+            {
+                "id": "node-4",
+                "title": "Single Page Routing, State Management & Vite",
+                "subtitle": "Phase 4 • Frontend Architecture",
+                "type": "Deep Dive Article",
+                "duration_mins": 40,
+                "status": "locked",
+                "description": "Implement global state contexts, code-splitting lazy loaders, and Vite production bundling."
+            },
+            {
+                "id": "node-5",
+                "title": f"Frontend Mastery & {role} Verification",
+                "subtitle": "Phase 5 • Final Calibration",
+                "type": "Performance Audit",
+                "duration_mins": 20,
+                "status": "locked",
+                "description": f"Verify UI/UX accessibility standards and audit render performance for {role}."
+            }
+        ]
+
+    # 3. AI / Machine Learning Architect
+    elif any(k in role_lower for k in ["ai", "ml", "machine learning", "pytorch", "data scientist", "deep learning"]):
+        return [
+            {
+                "id": "node-1",
+                "title": "Tensor Mathematics & NumPy/Pandas Baseline",
+                "subtitle": "Phase 1 • Orientation",
+                "type": "Video Tutorial",
+                "duration_mins": 20,
+                "status": "completed",
+                "description": "Calibrate matrix multiplication, gradient descent math, and data vectorization skills."
+            },
+            {
+                "id": "node-2",
+                "title": "PyTorch Neural Block & Autograd Pipeline",
+                "subtitle": "Phase 2 • Focus Sprint Check-in",
+                "type": "Focus Sprint",
+                "duration_mins": 30,
+                "status": "completed",
+                "description": "Build modular PyTorch residual layers, loss functions, and backpropagation training loops."
+            },
+            {
+                "id": "node-3",
+                "title": "Vector Databases, Embeddings & RAG Systems",
+                "subtitle": "Phase 3 • Active Journey Node",
+                "type": "Interactive AI Feed",
+                "duration_mins": 25,
+                "status": "active",
+                "description": "Construct high-signal retrieval-augmented generation pipelines using vector embeddings."
+            },
+            {
+                "id": "node-4",
+                "title": "LLM Fine-Tuning & Model Deployment",
+                "subtitle": "Phase 4 • System Architecture",
+                "type": "Deep Dive Article",
+                "duration_mins": 45,
+                "status": "locked",
+                "description": "Quantize neural weights, serve inference models via FastAPI, and monitor latency bounds."
+            },
+            {
+                "id": "node-5",
+                "title": f"AI Benchmark & {role} Verification",
+                "subtitle": "Phase 5 • Final Calibration",
+                "type": "Performance Audit",
+                "duration_mins": 20,
+                "status": "locked",
+                "description": f"Audit accuracy metrics and verify complete end-to-end pipeline for {role}."
+            }
+        ]
+
+    # 4. Java / Enterprise Developer
+    elif any(k in role_lower for k in ["java", "spring", "enterprise"]):
+        return [
+            {
+                "id": "node-1",
+                "title": "Java Object-Oriented Fundamentals & Core API",
+                "subtitle": "Phase 1 • Orientation",
+                "type": "Video Tutorial",
+                "duration_mins": 20,
+                "status": "completed",
+                "description": "Establish baseline encapsulation, polymorphism, interfaces, and strong type safety."
+            },
+            {
+                "id": "node-2",
+                "title": "JVM Memory Tuning & Concurrency Streams",
+                "subtitle": "Phase 2 • Focus Sprint Check-in",
+                "type": "Focus Sprint",
+                "duration_mins": 30,
+                "status": "completed",
+                "description": "Optimize Garbage Collection, heap stack allocations, and parallel Stream pipelines."
+            },
+            {
+                "id": "node-3",
+                "title": "Spring Boot Microservices & REST Controllers",
+                "subtitle": "Phase 3 • Active Journey Node",
+                "type": "Interactive AI Feed",
+                "duration_mins": 25,
+                "status": "active",
+                "description": "Build Spring Data JPA repositories, Dependency Injection beans, and Spring Security."
+            },
+            {
+                "id": "node-4",
+                "title": "Distributed Messaging & Kafka Event Streams",
+                "subtitle": "Phase 4 • System Architecture",
+                "type": "Deep Dive Article",
+                "duration_mins": 45,
+                "status": "locked",
+                "description": "Decouple microservices using Apache Kafka event topics and transaction managers."
+            },
+            {
+                "id": "node-5",
+                "title": f"Enterprise Audit & {role} Verification",
+                "subtitle": "Phase 5 • Final Calibration",
+                "type": "Performance Audit",
+                "duration_mins": 20,
+                "status": "locked",
+                "description": f"Verify 10/10 node mastery and enterprise production standards for {role}."
+            }
+        ]
+
+    # 5. Default Generic Role Generator
+    else:
+        return [
+            {
+                "id": "node-1",
+                "title": f"Foundational {role} Principles & Calibration",
+                "subtitle": "Phase 1 • Orientation",
+                "type": "Video Tutorial",
+                "duration_mins": 15,
+                "status": "completed",
+                "description": f"Establish core domain metrics and calibrate goal trajectory for {role}."
+            },
+            {
+                "id": "node-2",
+                "title": f"Deep Focus Execution Sprint for {role}",
+                "subtitle": "Phase 2 • Sprint Check-in",
+                "type": "Focus Sprint",
+                "duration_mins": 25,
+                "status": "completed",
+                "description": "25-minute uninterrupted execution block targeting core skill building."
+            },
+            {
+                "id": "node-3",
+                "title": f"Identity Graph & Media Curation: {role}",
+                "subtitle": "Phase 3 • Active Journey Node",
+                "type": "Interactive AI Feed",
+                "duration_mins": 20,
+                "status": "active",
+                "description": f"AI-curated high-signal learning resources specifically matching {role}."
+            },
+            {
+                "id": "node-4",
+                "title": f"Advanced System Design & Strategy for {role}",
+                "subtitle": "Phase 4 • Skill Matrix",
+                "type": "Deep Dive Article",
+                "duration_mins": 40,
+                "status": "locked",
+                "description": f"Master high-level architecture, problem-solving frameworks, and real-world patterns."
+            },
+            {
+                "id": "node-5",
+                "title": f"Mastery Verification & {role} Audit",
+                "subtitle": "Phase 5 • Final Calibration",
+                "type": "Performance Audit",
+                "duration_mins": 20,
+                "status": "locked",
+                "description": f"Verify 10/10 node mastery and optimize Value Per Minute index for {role}."
+            }
+        ]
+
+
+@app.post("/api/roadmap")
+async def get_dynamic_roadmap(req: RoadmapRequest):
+    nodes = _build_dynamic_roadmap_nodes(req.aspiration, req.topics)
+    return {
+        "status": "success",
+        "aspiration": req.aspiration,
+        "roadmap": nodes
+    }
+
+
 def _analyze_intent(goal: str) -> Dict[str, Any]:
     g = goal.lower()
     if any(k in g for k in ["react", "hooks", "frontend", "javascript"]):
@@ -1366,7 +1670,7 @@ async function executeDeepSkillTask(task, userWeights) {
     return {
         "status": "success",
         "skill": skill,
-        "question": req.question,
+"question": req.question,
         "answer": f"In **{skill}**, achieving high mastery requires understanding both top-level architectural abstractions and low-level performance characteristics. When addressing '{req.question}', the primary focus is isolating high-leverage bottlenecks and applying deterministic engineering patterns.",
         "code_snippet": fallback_code,
         "key_takeaways": [
@@ -1450,6 +1754,326 @@ def _build_suggestions(prompt: str) -> List[str]:
         return ["View sleep protocol", "Log energy baseline", "Start recovery sprint"]
     return ["Analyse my aspiration gap", "Generate a focus sprint", "Curate 4 resources"]
 
+# ═══════════════════════════════════════════════════════════════
+# 10. GOAL-BASED COMMUNITY COHORTS & AI FACILITATOR
+# ═══════════════════════════════════════════════════════════════
+
+class CommunityMessageRequest(BaseModel):
+    community_id: str
+    sender_id: str
+    sender_name: str
+    text: str
+    role: Optional[str] = "user"
+
+class TriggerAnnouncementRequest(BaseModel):
+    community_id: str
+
+def _classify_community(aspiration: str) -> dict:
+    asp = (aspiration or "").lower()
+    if any(k in asp for k in ["ai", "ml", "machine learning", "data science", "neural", "nlp", "computer vision", "intelligence", "llm"]):
+        return {
+            "id": "ai-ml",
+            "name": "🤖 AI & Machine Learning Hub",
+            "description": "Collaborate with neural architects, machine learning engineers, and researchers designing next-gen cognitive systems.",
+            "agent_name": "Aether-AI Facilitator",
+            "agent_avatar": "🤖",
+            "agent_prompt": "You are Aether-AI, the expert Community Facilitator AI for the AI & Machine Learning Hub. Keep announcements highly technical, motivational, and centered on AI systems, deep learning models, and training loops."
+        }
+    elif any(k in asp for k in ["software", "architect", "developer", "engineer", "full-stack", "backend", "frontend", "react", "rust", "web", "html", "css", "js", "javascript"]):
+        return {
+            "id": "full-stack",
+            "name": "💻 Software & Full-Stack Development",
+            "description": "Connect with backend, frontend, and systems engineers building scalable, reliable, and high-performance applications.",
+            "agent_name": "Nexus-Dev Facilitator",
+            "agent_avatar": "💻",
+            "agent_prompt": "You are Nexus-Dev, the expert Community Facilitator AI for the Software & Full-Stack Development cohort. Keep announcements practical, focusing on code quality, performance indexing, concurrent scaling, and software craftsmanship."
+        }
+    else:
+        return {
+            "id": "growth",
+            "name": "🌱 Peak Performance & Wellbeing",
+            "description": "Engage with productivity practitioners, founders, and growth catalysts training their deep work endurance and bio-routines.",
+            "agent_name": "Soma-Growth Facilitator",
+            "agent_avatar": "🌱",
+            "agent_prompt": "You are Soma-Growth, the expert Community Facilitator AI for the Peak Performance & Wellbeing cohort. Keep announcements focused on deep focus habits, circadian science, mental longevity, recovery protocols, and bio-routines."
+        }
+
+def _get_community_messages(community_id: str) -> List[Dict[str, Any]]:
+    try:
+        conn = sqlite3.connect("users.db")
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM community_messages WHERE community_id = ? ORDER BY id ASC", 
+            (community_id,)
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        
+        messages = []
+        for r in rows:
+            messages.append({
+                "id": r["id"],
+                "community_id": r["community_id"],
+                "sender_id": r["sender_id"],
+                "sender_name": r["sender_name"],
+                "role": r["role"],
+                "text": r["text"],
+                "is_announcement": bool(r["is_announcement"]),
+                "created_at": r["created_at"]
+            })
+        return messages
+    except Exception as e:
+        print(f"[FastAPI] SQLite community fetch error: {e}")
+        return [m for m in in_memory_db.get("community_messages", []) if m["community_id"] == community_id]
+
+def _record_community_message(community_id: str, sender_id: str, sender_name: str, role: str, text: str, is_announcement: bool = False):
+    created_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        conn = sqlite3.connect("users.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO community_messages (community_id, sender_id, sender_name, role, text, is_announcement, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (community_id, sender_id, sender_name, role, text, 1 if is_announcement else 0, created_at))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[FastAPI] SQLite community insert error: {e}")
+        
+    if "community_messages" not in in_memory_db:
+        in_memory_db["community_messages"] = []
+    
+    msg_obj = {
+        "id": int(time.time() * 1000),
+        "community_id": community_id,
+        "sender_id": sender_id,
+        "sender_name": sender_name,
+        "role": role,
+        "text": text,
+        "is_announcement": is_announcement,
+        "created_at": created_at
+    }
+    in_memory_db["community_messages"].append(msg_obj)
+    return msg_obj
+
+def seed_community_messages(community_id: str):
+    existing = _get_community_messages(community_id)
+    if existing:
+        return
+        
+    if community_id == "ai-ml":
+        _record_community_message(
+            "ai-ml", "agent_ai_ml", "Aether-AI Facilitator", "assistant",
+            "🚀 Welcome to the AI & Machine Learning Hub. I've compiled our baseline training objective: Reach 95%+ accuracy on local neural weights this week. Please review your active nodes and check the daily Curated Feed.",
+            is_announcement=True
+        )
+        _record_community_message("ai-ml", "usr_sophia", "Sophia Chen (ML Researcher)", "user", "Hey everyone! Glad to join this cohort. Currently parsing the illustrated transformer guide to optimize my embedding dimensions.")
+        _record_community_message("ai-ml", "usr_liam", "Liam Vance (Rust Dev)", "user", "Nice, Sophia! I'm working on running tokenization in Rust concurrency lanes. Need to reduce CPU context switching bottlenecks.")
+        _record_community_message(
+            "ai-ml", "agent_ai_ml", "Aether-AI Facilitator", "assistant",
+            "Excellent alignment, Liam. Context switching accounts for up to 14% energy decay in deep focus sprints. I recommend mapping your concurrency threads explicitly using worker pools.",
+            is_announcement=False
+        )
+    elif community_id == "full-stack":
+        _record_community_message(
+            "full-stack", "agent_fs", "Nexus-Dev Facilitator", "assistant",
+            "⚡ Welcome to the Software & Full-Stack Development cohort. Our goal this week is reducing client-side bundle size and mastering reactive concurrency. Pinned resource: React useEffect deep dive.",
+            is_announcement=True
+        )
+        _record_community_message("full-stack", "usr_alex", "Alex Mercer (Senior Full-Stack)", "user", "Hey all, just checked the useEffect guide. The explanation on clean-ups for abort controllers really cleaned up my socket listeners.")
+        _record_community_message("full-stack", "usr_emily", "Emily Watson (Frontend Lead)", "user", "Agreed! Also, has anyone profiled React 19 concurrent renders yet? Finding some layout shifts on strict-mode loads.")
+        _record_community_message(
+            "full-stack", "agent_fs", "Nexus-Dev Facilitator", "assistant",
+            "Emily, strict-mode doubles rendering intentionally to flag side-effects. To combat layout shifts, leverage useTransition to defer secondary paint cycles.",
+            is_announcement=False
+        )
+    else:
+        _record_community_message(
+            "growth", "agent_growth", "Soma-Growth Facilitator", "assistant",
+            "🌱 Welcome to the Peak Performance & Wellbeing cohort. Our foundational habit is anchoring 25-minute deep focus sprints with 5-minute restorative box breathing checks. Let's build momentum.",
+            is_announcement=True
+        )
+        _record_community_message("growth", "usr_dan", "Dan Koe (Productivity Coach)", "user", "Absolutely loving the digital guardian focus room. Intercepted 30 mins of mindless social scrolling this morning!")
+        _record_community_message("growth", "usr_clara", "Clara Oswald (Creative Founder)", "user", "Yes! My VPM index went up to $5.20/min after executing the Cal Newport Deep Work framework.")
+        _record_community_message(
+            "growth", "agent_growth", "Soma-Growth Facilitator", "assistant",
+            "Incredible progression, Clara. A VPM exceeding $5.00/min indicates high cognitive alignment. Ensure you take a 10,000 lux light exposure break to protect your circadian rhythm.",
+            is_announcement=False
+        )
+
+@app.get("/api/community/group")
+async def get_community_group(user_id: str = "usr_default"):
+    profile = in_memory_db["user_profiles"].get(user_id)
+    aspiration = ""
+    if profile:
+        aspiration = profile.get("aspiration") or ""
+    else:
+        if user_id == "usr_default":
+            aspiration = "Senior AI Architect"
+    return _classify_community(aspiration)
+
+@app.get("/api/community/messages")
+async def get_community_messages(community_id: str):
+    seed_community_messages(community_id)
+    messages = _get_community_messages(community_id)
+    return {"messages": messages}
+
+@app.post("/api/community/messages")
+async def post_community_message(req: CommunityMessageRequest):
+    msg = _record_community_message(
+        req.community_id, req.sender_id, req.sender_name, req.role or "user", req.text, is_announcement=False
+    )
+    if req.role == "user":
+        agent_info = None
+        for cid in ["ai-ml", "full-stack", "growth"]:
+            cdata = _classify_community(cid if cid == req.community_id else "other")
+            if cdata["id"] == req.community_id:
+                agent_info = cdata
+                break
+        
+        if agent_info:
+            agent_name = agent_info["agent_name"]
+            agent_prompt = agent_info["agent_prompt"]
+            recent_msgs = _get_community_messages(req.community_id)[-8:]
+            thread_context = "\n".join([f"{m['sender_name']}: {m['text']}" for m in recent_msgs])
+            
+            prompt = f"""
+{agent_prompt}
+
+You are in a community group chat. Here is the recent chat history:
+{thread_context}
+
+Provide a short, 1-2 sentence response addressed to the community or the last sender, offering technical insight, productivity feedback, or encouragement related to their discussion. Keep it concise, high-tech, and supportive. Do not use prefixes like "{agent_name}:". Just write the text.
+"""
+            ai_reply = _generate_gemini(prompt)
+            if not ai_reply:
+                if req.community_id == "ai-ml":
+                    ai_reply = f"Acknowledged. We should keep an eye on model overfitting when adjusting weights. Have you validated your training data profile?"
+                elif req.community_id == "full-stack":
+                    ai_reply = f"Excellent point. Always remember to decouple database calls from UI paint lifecycles to avoid bottlenecking."
+                else:
+                    ai_reply = f"Well observed. Regular energy logging is critical to maintaining a high focus trajectory. Keep up the sprint alignment!"
+            
+            _record_community_message(
+                req.community_id, f"agent_{req.community_id}", agent_name, "assistant", ai_reply, is_announcement=False
+            )
+            
+    return {"status": "success", "message": msg}
+
+@app.post("/api/community/trigger-announcement")
+async def trigger_community_announcement(req: TriggerAnnouncementRequest):
+    agent_info = None
+    for cid in ["ai-ml", "full-stack", "growth"]:
+        cdata = _classify_community(cid if cid == req.community_id else "other")
+        if cdata["id"] == req.community_id:
+            agent_info = cdata
+            break
+            
+    if not agent_info:
+        raise HTTPException(status_code=400, detail="Invalid community ID")
+        
+    agent_name = agent_info["agent_name"]
+    agent_prompt = agent_info["agent_prompt"]
+    
+    prompt = f"""
+{agent_prompt}
+
+Create a premium, motivational community announcement for today. It should be a Daily Challenge, a high-value Tip, or an Announcement of a core goal.
+It must contain:
+1. A catchy bold title
+2. An actionable 2-3 sentence description detailing a focus task or learning sprint.
+Keep the style extremely professional, high-tech, and direct. Do not include markdown backticks or system prefixes. Just write the announcement text.
+"""
+    announcement_text = _generate_gemini(prompt)
+    if not announcement_text:
+        if req.community_id == "ai-ml":
+            announcement_text = "**Daily Challenge: Loss Optimization**\n\nRun a 15-minute training calibration sprint. Attempt to reduce local weight entropy loss to below 0.10. Post your accuracy percentages in the chat!"
+        elif req.community_id == "full-stack":
+            announcement_text = "**Technical Tip: Async Hydration**\n\nAvoid loading layout states during hydrate cycles in concurrent React page renders. Use dynamic import boundaries to isolate resource-heavy charts."
+        else:
+            announcement_text = "**Wellbeing Protocol: 90-Min Focus Boundaries**\n\nEngage in a 90-minute intentional focus sprint, followed by a strict 10-minute zero-input recovery walk. Protect your cognitive bandwidth."
+            
+    msg = _record_community_message(
+        req.community_id, f"agent_{req.community_id}", agent_name, "assistant", announcement_text, is_announcement=True
+    )
+    return {"status": "success", "announcement": msg}
+
+
+class TutorRequest(BaseModel):
+    topic: str
+
+@app.post("/api/tutor")
+def generate_tutor_explanation(payload: TutorRequest):
+    topic_text = payload.topic.strip()
+    
+    if not topic_text:
+        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
+    
+    # Check if Gemini is configured
+    if not genai or not GEMINI_API_KEY or GEMINI_API_KEY == "YOUR_GEMINI_API_KEY_HERE":
+        # Fallback explanation if API key is missing
+        explanation_content = (
+            f"⚠️ **Gemini API Key Missing**\n\n"
+            f"Please configure your `GEMINI_API_KEY` in the backend `.env` file to unlock real-time explanations for **{topic_text}**."
+        )
+    else:
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            prompt = (
+                f"You are an expert AI Tutor. The user is asking about or taking action on the topic: '{topic_text}'. "
+                f"Provide a clear, educational, and structured explanation. Use markdown with bullet points and bold text where appropriate."
+            )
+            response = model.generate_content(prompt)
+            explanation_content = response.text.strip()
+        except Exception as e:
+            print(f"Gemini API Error: {e}")
+            explanation_content = (
+                f"⚠️ **Error generating response**\n\n"
+                f"Could not fetch AI response for **{topic_text}**. Please try again later or check your API key constraints."
+            )
+    
+    return {
+        "status": "success",
+        "success": True,
+        "topic": topic_text,
+        "explanation": explanation_content
+    }
+
+@app.post("/signup")
+async def signup(user: UserSignup):
+    try:
+        conn = sqlite3.connect("users.db")
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO users (name, email, password) VALUES (?, ?, ?)", 
+                       (user.name, user.email, user.password))
+        conn.commit()
+        conn.close()
+        return {
+            "message": "Identity registered successfully",
+            "access_token": f"token_for_{user.email}",
+            "token_type": "bearer"
+        }
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=400, detail="Identity Vector (Email) already registered.")
+
+@app.post("/login")
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT password FROM users WHERE email = ?", (form_data.username,))
+    result = cursor.fetchone()
+    conn.close()
+    if not result or result[0] != form_data.password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Access Denied: Invalid Identity Vector or Security Key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return {
+        "access_token": f"token_for_{form_data.username}", 
+        "token_type": "bearer"
+    }
 
 @app.post("/api/points/award")
 async def award_points(req: PointsAwardRequest):

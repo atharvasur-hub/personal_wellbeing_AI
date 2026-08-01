@@ -20,7 +20,6 @@ export default function AiTutor() {
             });
 
             const data = await response.json();
-            console.log("API Response received:", data);
 
             if (data && data.explanation) {
                 setExplanation(data.explanation);
