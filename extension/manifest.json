@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Aspiration Engine Interceptor",
+  "version": "1.0.0",
+  "description": "Intercepts distracting sites to promote deep work and schedule focus sessions.",
+  "permissions": [
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.reddit.com/*",
+    "*://*.x.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.reddit.com/*",
+        "*://*.x.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

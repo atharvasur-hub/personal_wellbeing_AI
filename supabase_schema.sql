@@ -48,12 +48,22 @@ CREATE TABLE IF NOT EXISTS public.roadmap_items (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 6. Create User Telemetry Table for VPM & Implicit Profiling
+CREATE TABLE IF NOT EXISTS public.user_telemetry (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  domain TEXT NOT NULL,
+  time_saved_seconds INT NOT NULL DEFAULT 0,
+  action TEXT NOT NULL DEFAULT 'intentional_focus',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.identity_nodes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reflections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.roadmap_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_telemetry ENABLE ROW LEVEL SECURITY;
 
 -- Create Public Access Policies (Allow read/write for frontend demo)
 CREATE POLICY "Public Read Profiles" ON public.profiles FOR SELECT USING (true);
@@ -70,7 +80,10 @@ CREATE POLICY "Public Read Roadmap" ON public.roadmap_items FOR SELECT USING (tr
 CREATE POLICY "Public Insert Roadmap" ON public.roadmap_items FOR INSERT WITH CHECK (true);
 CREATE POLICY "Public Update Roadmap" ON public.roadmap_items FOR UPDATE USING (true);
 
--- 6. Create Media Evaluations Table
+CREATE POLICY "Public Read Telemetry" ON public.user_telemetry FOR SELECT USING (true);
+CREATE POLICY "Public Insert Telemetry" ON public.user_telemetry FOR INSERT WITH CHECK (true);
+
+-- 7. Create Media Evaluations Table
 CREATE TABLE IF NOT EXISTS public.media_evaluations (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -87,3 +100,4 @@ ALTER TABLE public.media_evaluations ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Public Read Media Evaluations" ON public.media_evaluations FOR SELECT USING (true);
 CREATE POLICY "Public Insert Media Evaluations" ON public.media_evaluations FOR INSERT WITH CHECK (true);
+
