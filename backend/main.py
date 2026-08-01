@@ -1904,26 +1904,31 @@ async def award_points(req: PointsAwardRequest):
         return {"status": "success", "message": "Logged to in-memory fallback", "points": points_to_award}
     
     try:
+        print(f"[FastAPI] Awarding {points_to_award} points to {req.user_id} for {req.action_type}")
         # 1. Log the interaction
-        supabase_client.table("points_log").insert({
+        log_res = supabase_client.table("points_log").insert({
             "user_id": req.user_id,
             "action_type": req.action_type,
             "points_awarded": points_to_award
         }).execute()
+        print(f"[FastAPI] points_log insert response: {log_res.data}")
         
         # 2. Update total points
         res = supabase_client.table("user_points").select("total_points").eq("user_id", req.user_id).execute()
+        print(f"[FastAPI] user_points select response: {res.data}")
         if res.data and len(res.data) > 0:
             new_points = res.data[0]["total_points"] + points_to_award
-            supabase_client.table("user_points").update({"total_points": new_points}).eq("user_id", req.user_id).execute()
+            upd_res = supabase_client.table("user_points").update({"total_points": new_points}).eq("user_id", req.user_id).execute()
+            print(f"[FastAPI] user_points update response: {upd_res.data}")
         else:
             new_points = req.points
             # Extract name from email if available or default to "User"
-            supabase_client.table("user_points").insert({
+            ins_res = supabase_client.table("user_points").insert({
                 "user_id": req.user_id, 
                 "total_points": new_points,
                 "name": "User"
             }).execute()
+            print(f"[FastAPI] user_points insert response: {ins_res.data}")
             
         return {"status": "success", "total_points": new_points}
     except Exception as e:

@@ -34,9 +34,15 @@ export default function VideoCard({ item, isDarkMode }) {
   const handleVideoEnded = () => {
     if (completed) return;
     setCompleted(true);
-    awardPoints('usr_default', 'video_watched', 10).then(() => {
-      window.dispatchEvent(new CustomEvent('pointsAwarded', { detail: { points: 10 } }));
-    }).catch(console.error);
+    console.log("[VideoCard] Dispatching awardPoints payload: { action_type: 'video_watched', points: 10 }");
+    awardPoints('usr_default', 'video_watched', 10).then((res) => {
+      console.log("[VideoCard] awardPoints response:", res);
+      if (res && res.status === 'success') {
+        window.dispatchEvent(new CustomEvent('pointsAwarded', { detail: { points: 10 } }));
+      }
+    }).catch((err) => {
+      console.error("[VideoCard] awardPoints error:", err);
+    });
   };
 
   return (
