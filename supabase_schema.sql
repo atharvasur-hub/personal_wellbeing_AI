@@ -69,3 +69,21 @@ CREATE POLICY "Public Insert Reflections" ON public.reflections FOR INSERT WITH 
 CREATE POLICY "Public Read Roadmap" ON public.roadmap_items FOR SELECT USING (true);
 CREATE POLICY "Public Insert Roadmap" ON public.roadmap_items FOR INSERT WITH CHECK (true);
 CREATE POLICY "Public Update Roadmap" ON public.roadmap_items FOR UPDATE USING (true);
+
+-- 6. Create Media Evaluations Table
+CREATE TABLE IF NOT EXISTS public.media_evaluations (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  aspiration TEXT NOT NULL,
+  duration_minutes NUMERIC,
+  intentionality_score NUMERIC CHECK (intentionality_score >= 0 AND intentionality_score <= 100),
+  vpm_score NUMERIC,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS and add public access policy for media evaluations
+ALTER TABLE public.media_evaluations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public Read Media Evaluations" ON public.media_evaluations FOR SELECT USING (true);
+CREATE POLICY "Public Insert Media Evaluations" ON public.media_evaluations FOR INSERT WITH CHECK (true);
