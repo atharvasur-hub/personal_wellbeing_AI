@@ -1,401 +1,454 @@
-import React, { useState } from 'react';
-import { Bot, Send, Sparkles, Play, CheckCircle, Code, Brain, RefreshCw, Flame } from 'lucide-react';
-import { analyzeUserIntent, listAutonomousCurations } from '../lib/mlEngine';
+import React, { useState, useRef, useEffect } from 'react';
+import {
+  Bot, Send, Sparkles, Play, BookOpen,
+  Brain, RefreshCw, Flame, ExternalLink,
+  Film, Loader2, ChevronRight, Check
+} from 'lucide-react';
+import { fetchAIRecommendations } from '../lib/contentRecommender';
 import { saveUserAspirationToSupabase } from '../lib/supabaseClient';
 
+// Media type config
+const MEDIA_CONFIG = {
+  video: {
+    label: '📹 Video',
+    badgeBg: isDark => isDark ? 'bg-violet-500/15 border-violet-500/20 text-violet-300' : 'bg-violet-50 border-violet-100 text-violet-700',
+    accentColor: 'text-violet-500',
+    embedPrefix: 'https://www.youtube-nocookie.com/embed/'
+  },
+  short: {
+    label: '⚡ Short',
+    badgeBg: isDark => isDark ? 'bg-cyan-500/15 border-cyan-500/20 text-cyan-300' : 'bg-cyan-50 border-cyan-100 text-cyan-700',
+    accentColor: 'text-cyan-500',
+    embedPrefix: 'https://www.youtube-nocookie.com/embed/'
+  },
+  reel: {
+    label: '🔥 Reel',
+    badgeBg: isDark => isDark ? 'bg-rose-500/15 border-rose-500/20 text-rose-300' : 'bg-rose-50 border-rose-100 text-rose-700',
+    accentColor: 'text-rose-500',
+    embedPrefix: 'https://www.youtube-nocookie.com/embed/'
+  },
+  article: {
+    label: '📖 Article',
+    badgeBg: isDark => isDark ? 'bg-indigo-500/15 border-indigo-500/20 text-indigo-300' : 'bg-indigo-50 border-indigo-100 text-indigo-700',
+    accentColor: 'text-indigo-500',
+    embedPrefix: null
+  }
+};
+
+const SIGNAL_SCORES = { video: 98, short: 96, reel: 95, article: 94 };
+
+// Individual Media Card
+function MediaCard({ item, index, isDarkMode }) {
+  const config = MEDIA_CONFIG[item.type] || MEDIA_CONFIG.video;
+  const signalScore = SIGNAL_SCORES[item.type] || 94;
+
+  return (
+    <div className={`rounded-3xl p-5 border flex flex-col gap-4 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl group ${
+      isDarkMode
+        ? 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
+        : 'bg-white border-stone-200/80 shadow-md hover:shadow-xl'
+    }`}>
+
+      {/* Card Top Bar */}
+      <div className="flex items-center justify-between">
+        <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold font-mono uppercase border flex items-center gap-1 ${config.badgeBg(isDarkMode)}`}>
+          <span>{index + 1}.</span>
+          <span>{config.label}</span>
+        </span>
+        <span className="text-[9px] font-mono text-emerald-600 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+          {signalScore}% Signal
+        </span>
+      </div>
+
+      {/* Media Embed Area */}
+      {item.type !== 'article' && item.youtubeId ? (
+        <div className="rounded-2xl overflow-hidden aspect-video bg-black border border-stone-200/20 shadow-sm">
+          <iframe
+            className="w-full h-full"
+            src={`${config.embedPrefix}${item.youtubeId}?rel=0&modestbranding=1`}
+            title={item.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
+      ) : item.type !== 'article' ? (
+        <div className="rounded-2xl overflow-hidden aspect-video bg-gradient-to-br from-slate-900 to-indigo-950 flex flex-col items-center justify-center border border-white/10 shadow-sm">
+          <Play className="w-8 h-8 text-white fill-white animate-bounce" />
+          <span className="text-[10px] text-white/60 font-mono mt-1">{config.label}</span>
+        </div>
+      ) : (
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`rounded-2xl overflow-hidden h-32 border flex flex-col justify-between p-4 group/link transition hover:border-indigo-400 ${
+            isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-stone-50 border-stone-200/60'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-mono font-bold uppercase text-indigo-500">DEEP DIVE ARTICLE</span>
+            <ExternalLink className="w-3.5 h-3.5 text-stone-400 group-hover/link:text-indigo-500 transition" />
+          </div>
+          <p className={`text-[11px] font-serif italic leading-relaxed line-clamp-2 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
+            "{item.title}"
+          </p>
+          <span className="text-[9px] font-mono text-indigo-400 font-bold truncate">{item.url?.replace('https://', '')}</span>
+        </a>
+      )}
+
+      {/* Title */}
+      <h3 className={`font-extrabold text-xs leading-snug line-clamp-2 ${isDarkMode ? 'text-slate-100' : 'text-stone-900'}`}>
+        {item.title}
+      </h3>
+
+      {/* AI Reasoning Badge */}
+      <div className={`p-2.5 rounded-xl border text-[10px] leading-normal flex items-start gap-1.5 ${
+        isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-stone-50 border-stone-200/60 text-stone-500'
+      }`}>
+        <Brain className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${config.accentColor}`} />
+        <span>{item.reason || 'Curated based on your goal.'}</span>
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between mt-auto">
+        <span className={`text-[9px] font-mono font-bold ${config.accentColor}`}>
+          {item.duration}
+        </span>
+        {item.url && (
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`text-[9px] font-bold font-mono flex items-center gap-1 hover:underline transition ${config.accentColor}`}
+          >
+            <span>Open</span>
+            <ExternalLink className="w-2.5 h-2.5" />
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// -----------------------------------------------
+// MAIN COMPONENT
+// -----------------------------------------------
 export default function AgenticOnboardingFlow({ isDarkMode = false }) {
-  // Step state: 'chat' | 'curating' | 'feed'
-  const [step, setStep] = useState('chat');
+  const [step, setStep] = useState('chat'); // 'chat' | 'curating' | 'feed'
   const [messages, setMessages] = useState([
     {
       id: 1,
-      role: 'assistant',
-      text: "Welcome back. What is your primary goal right now, and how are you feeling today?"
+      role: 'ai',
+      text: "Welcome back! I'm your Synapse AI Growth Architect. What is your **primary goal right now**, and how are you feeling today?\n\nTell me your goal and I'll curate 4 pieces of content — a Video, Short, Reel, and Article — tailored exactly for you. 🎯"
     }
   ]);
-  const [userInput, setUserInput] = useState('');
-  const [userIntent, setUserIntent] = useState(null);
-  const [curatedMedia, setCuratedMedia] = useState([]);
-  const [interactiveCode, setInteractiveCode] = useState("const [count, setCount] = useState(0);");
-  const [codeSubmitted, setCodeSubmitted] = useState(false);
+  const [input, setInput] = useState('');
+  const [userGoal, setUserGoal] = useState('');
+  const [recommendations, setRecommendations] = useState([]);
+  const [curatingStep, setCuratingStep] = useState(0);
+  const bottomRef = useRef(null);
 
-  const handleSendMessage = async (e) => {
+  const CURATING_STEPS = [
+    'Analyzing your goal intent...',
+    'Scanning YouTube for high-signal videos...',
+    'Filtering noise & ranking by relevance...',
+    'Building your 4-item personalized feed...'
+  ];
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, step]);
+
+  // Animate curating steps
+  useEffect(() => {
+    if (step !== 'curating') return;
+    let i = 0;
+    const interval = setInterval(() => {
+      i += 1;
+      if (i < CURATING_STEPS.length) {
+        setCuratingStep(i);
+      } else {
+        clearInterval(interval);
+      }
+    }, 650);
+    return () => clearInterval(interval);
+  }, [step]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!userInput.trim()) return;
+    const goalText = input.trim();
+    if (!goalText) return;
 
-    const textToSend = userInput;
-    const newMessages = [
-      ...messages,
-      { id: Date.now(), role: 'user', text: textToSend }
-    ];
-    setMessages(newMessages);
-    setUserInput('');
+    setInput('');
+    setUserGoal(goalText);
 
-    // Trigger ML Intent & Behavior Analysis (Pillar 1)
-    const intentResult = analyzeUserIntent(textToSend, 'focused', 'low');
-    setUserIntent(intentResult);
+    // Append user message
+    const userMsg = { id: Date.now(), role: 'user', text: goalText };
+    setMessages(prev => [...prev, userMsg]);
 
-    // Save Intent to Supabase PostgreSQL per user
+    // Append AI "thinking" reply
+    const aiReply = {
+      id: Date.now() + 1,
+      role: 'ai',
+      text: `Great! I'm analyzing your goal: **"${goalText}"** and curating 4 targeted resources — a Video, Short, Reel, and Article — just for you. Give me a moment...`
+    };
+    setMessages(prev => [...prev, aiReply]);
+
+    // Transition to curating phase
+    setStep('curating');
+    setCuratingStep(0);
+
+    // Save to Supabase
     saveUserAspirationToSupabase({
-      primary_goal: textToSend,
-      current_mood: intentResult.currentMood,
-      fatigue_level: intentResult.fatigueLevel,
-      intent_vector: { domain: intentResult.targetDomain, energy: intentResult.cognitiveEnergyScore }
+      primary_goal: goalText,
+      current_mood: 'focused',
+      fatigue_level: 'low',
+      intent_vector: { source: 'onboarding_chat' }
     });
 
-    // Trigger Phase 1 ➔ Phase 2 Transition (Simulate 2-second AI Curation)
-    setStep('curating');
-    
-    // Autonomous Curation (Pillar 3)
-    const curatedItems = listAutonomousCurations(intentResult);
-    setCuratedMedia(curatedItems);
-
-    setTimeout(() => {
-      setStep('feed');
-    }, 2000);
+    // Fetch AI recommendations (Gemini + fallback)
+    const recs = await fetchAIRecommendations(goalText);
+    setRecommendations(recs);
+    setStep('feed');
   };
 
-  const handleResetFlow = () => {
+  const handleChipClick = (chip) => setInput(chip);
+
+  const handleReset = () => {
     setStep('chat');
-    setMessages([
-      {
-        id: 1,
-        role: 'assistant',
-        text: "Welcome back. What is your primary goal right now, and how are you feeling today?"
-      }
-    ]);
-    setUserInput('');
-    setUserIntent(null);
-    setCodeSubmitted(false);
+    setUserGoal('');
+    setRecommendations([]);
+    setMessages([{
+      id: 1,
+      role: 'ai',
+      text: "Welcome back! What is your **primary goal right now**, and how are you feeling today? Tell me and I'll curate 4 pieces of content — a Video, Short, Reel, and Article — tailored exactly for you. 🎯"
+    }]);
   };
+
+  const chips = [
+    'I want to master React Hooks',
+    'I want to learn Machine Learning',
+    'I want to study System Design',
+    'I want to improve my health & sleep',
+    'I want to build deep work habits'
+  ];
 
   return (
-    <div className="w-full max-w-6xl mx-auto transition-all duration-500">
-      
-      {/* PHASE 1: CHATBOT ONBOARDING */}
+    <div className="w-full max-w-6xl mx-auto">
+
+      {/* ─── PHASE 1: CHAT ──────────────────────────────── */}
       {step === 'chat' && (
-        <div className={`rounded-[2rem] p-8 md:p-12 border shadow-2xl backdrop-blur-xl animate-fade-in flex flex-col justify-between min-h-[500px] ${
-          isDarkMode 
-            ? 'bg-slate-900/90 border-slate-800 text-slate-100 shadow-indigo-500/10' 
-            : 'bg-white/80 border-stone-100 text-stone-900 shadow-xl'
+        <div className={`rounded-[2rem] border shadow-2xl backdrop-blur-xl flex flex-col overflow-hidden ${
+          isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-stone-100 shadow-xl'
         }`}>
+
           {/* Header */}
-          <div className="flex justify-between items-center pb-6 border-b border-stone-200/50">
-            <div className="flex items-center gap-3">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md ${
-                isDarkMode ? 'bg-gradient-to-tr from-indigo-500 to-violet-600' : 'bg-gradient-to-tr from-teal-400 to-cyan-500'
-              }`}>
-                <Bot className="w-6 h-6" />
-              </div>
-              <div>
-                <h2 className="text-lg font-black tracking-tight flex items-center gap-2">
-                  <span>SYNAPSE INTENT ANALYZER</span>
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-                </h2>
-                <p className={`text-xs font-mono ${isDarkMode ? 'text-slate-400' : 'text-stone-400'}`}>
-                  Phase 1 of 2 • Intent & Behavior Analysis
-                </p>
-              </div>
+          <div className={`px-8 py-5 border-b flex items-center gap-3 ${
+            isDarkMode ? 'border-slate-800 bg-slate-900/50' : 'border-stone-100 bg-stone-50/60'
+          }`}>
+            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-sm ${
+              isDarkMode ? 'bg-gradient-to-tr from-indigo-500 to-violet-600' : 'bg-gradient-to-tr from-teal-400 to-cyan-500'
+            }`}>
+              <Bot className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className={`text-sm font-black flex items-center gap-2 ${isDarkMode ? 'text-slate-100' : 'text-stone-900'}`}>
+                SYNAPSE AI GOAL ARCHITECT
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+              </h2>
+              <p className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-500' : 'text-stone-400'}`}>
+                Powered by Google Gemini • Phase 1 of 2
+              </p>
             </div>
           </div>
 
-          {/* Chat Conversation Thread */}
-          <div className="flex flex-col gap-4 py-8 max-w-3xl mx-auto w-full overflow-y-auto">
-            {messages.map((msg) => (
-              <div 
+          {/* Messages */}
+          <div className="flex flex-col gap-5 px-8 py-6 min-h-[280px]">
+            {messages.map(msg => (
+              <div
                 key={msg.id}
-                className={`flex gap-3 max-w-[85%] ${
-                  msg.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
-                }`}
+                className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse ml-auto max-w-[80%]' : 'mr-auto max-w-[85%]'}`}
               >
-                <div className={`w-9 h-9 rounded-2xl flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm ${
-                  msg.role === 'user' 
-                    ? 'bg-teal-500' 
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm ${
+                  msg.role === 'user'
+                    ? 'bg-teal-500'
                     : isDarkMode ? 'bg-indigo-600' : 'bg-gradient-to-tr from-teal-400 to-cyan-500'
                 }`}>
-                  {msg.role === 'user' ? 'U' : <Bot className="w-5 h-5" />}
+                  {msg.role === 'user' ? 'U' : <Bot className="w-4 h-4" />}
                 </div>
-
-                <div className={`p-5 rounded-3xl border text-sm leading-relaxed shadow-sm ${
+                <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed border shadow-sm whitespace-pre-line ${
                   msg.role === 'user'
                     ? 'bg-teal-500 text-white border-teal-400 rounded-tr-none'
-                    : isDarkMode ? 'bg-slate-950/80 border-slate-800 text-slate-100 rounded-tl-none' : 'bg-stone-50/90 border-stone-200/80 text-stone-800 rounded-tl-none'
+                    : isDarkMode
+                      ? 'bg-slate-950 border-slate-800 text-slate-200 rounded-tl-none'
+                      : 'bg-stone-50 border-stone-200/60 text-stone-800 rounded-tl-none'
                 }`}>
-                  {msg.text}
+                  {msg.text.replace(/\*\*(.*?)\*\*/g, '$1')}
                 </div>
               </div>
             ))}
+            <div ref={bottomRef} />
           </div>
 
-          {/* Quick Suggestions Chips & Input Bar */}
-          <div className="flex flex-col gap-4 max-w-3xl mx-auto w-full">
-            <div className="flex flex-wrap gap-2 justify-center">
-              {[
-                "I want to learn React but I'm feeling tired today",
-                "Goal: Master TypeScript with high energy",
-                "Low energy, need a quick 5-min refresher"
-              ].map((chip, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setUserInput(chip)}
-                  className={`px-3.5 py-1.5 rounded-full border text-xs font-semibold transition cursor-pointer ${
-                    isDarkMode 
-                      ? 'bg-slate-950 border-slate-800 text-indigo-300 hover:bg-slate-800' 
-                      : 'bg-white border-stone-200/80 text-teal-700 hover:bg-teal-50'
-                  }`}
-                >
-                  + {chip}
-                </button>
-              ))}
-            </div>
-
-            <form onSubmit={handleSendMessage} className="flex gap-3">
-              <input
-                type="text"
-                required
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                placeholder="Reply with your goal and mood..."
-                className={`flex-1 border rounded-2xl px-5 py-4 text-xs md:text-sm focus:outline-none transition shadow-sm ${
-                  isDarkMode 
-                    ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-500 focus:border-indigo-500/40' 
-                    : 'bg-stone-50 border-stone-200 text-stone-800 placeholder-stone-400 focus:border-teal-500/50'
-                }`}
-              />
+          {/* Quick Chips */}
+          <div className={`px-8 pt-2 flex flex-wrap gap-2 ${isDarkMode ? '' : ''}`}>
+            {chips.map((chip, i) => (
               <button
-                type="submit"
-                className={`px-7 py-4 rounded-2xl text-white font-extrabold text-xs md:text-sm transition flex items-center gap-2 shadow-md hover:shadow-lg cursor-pointer ${
-                  isDarkMode ? 'bg-gradient-to-r from-indigo-500 to-violet-600' : 'bg-gradient-to-r from-teal-400 to-cyan-500'
+                key={i}
+                type="button"
+                onClick={() => handleChipClick(chip)}
+                className={`px-3 py-1.5 rounded-full border text-[11px] font-semibold transition cursor-pointer ${
+                  isDarkMode
+                    ? 'bg-slate-950 border-slate-800 text-indigo-300 hover:bg-slate-800 hover:border-indigo-500/40'
+                    : 'bg-white border-stone-200 text-teal-700 hover:bg-teal-50 hover:border-teal-200'
                 }`}
               >
-                <span>Send Intent</span>
-                <Send className="w-4 h-4" />
+                + {chip}
               </button>
-            </form>
+            ))}
           </div>
+
+          {/* Input Bar */}
+          <form onSubmit={handleSubmit} className="px-8 pb-8 pt-4 flex gap-3">
+            <input
+              type="text"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              placeholder="Tell me your goal (e.g. I want to master React Hooks)..."
+              className={`flex-1 border rounded-2xl px-5 py-3.5 text-sm focus:outline-none transition ${
+                isDarkMode
+                  ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-500 focus:border-indigo-500/40'
+                  : 'bg-stone-50 border-stone-200 text-stone-800 placeholder-stone-400 focus:border-teal-400'
+              }`}
+            />
+            <button
+              type="submit"
+              disabled={!input.trim()}
+              className={`px-6 py-3.5 rounded-2xl font-extrabold text-sm text-white flex items-center gap-2 shadow-md hover:shadow-lg transition disabled:opacity-40 cursor-pointer ${
+                isDarkMode
+                  ? 'bg-gradient-to-r from-indigo-500 to-violet-600'
+                  : 'bg-gradient-to-r from-teal-400 to-cyan-500'
+              }`}
+            >
+              <span>Curate 4 for Me</span>
+              <Send className="w-4 h-4" />
+            </button>
+          </form>
         </div>
       )}
 
-      {/* TRANSITION STATE: 2-SECOND AI CURATION LOADING */}
+      {/* ─── CURATING PHASE ─────────────────────────────── */}
       {step === 'curating' && (
-        <div className={`rounded-[2rem] p-16 border shadow-2xl backdrop-blur-xl text-center flex flex-col items-center justify-center gap-6 min-h-[480px] animate-fade-in ${
-          isDarkMode 
-            ? 'bg-slate-900/90 border-slate-800 text-slate-100' 
-            : 'bg-white/80 border-stone-100 text-stone-900'
+        <div className={`rounded-[2rem] border shadow-2xl text-center flex flex-col items-center justify-center gap-8 py-20 px-8 min-h-[420px] ${
+          isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-stone-100'
         }`}>
           <div className="relative">
-            <div className="w-20 h-20 rounded-full border-4 border-teal-400 border-t-transparent animate-spin" />
-            <Brain className="w-8 h-8 text-teal-500 absolute inset-0 m-auto animate-pulse" />
+            <div className={`w-20 h-20 rounded-full border-4 border-t-transparent animate-spin ${
+              isDarkMode ? 'border-indigo-500' : 'border-teal-400'
+            }`} />
+            <Brain className={`w-8 h-8 absolute inset-0 m-auto animate-pulse ${
+              isDarkMode ? 'text-indigo-400' : 'text-teal-500'
+            }`} />
           </div>
 
           <div className="flex flex-col gap-2">
-            <h3 className="text-xl font-black tracking-tight">Autonomous Curation & Signal Scoring...</h3>
-            <p className={`text-xs max-w-md ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
-              Evaluating content signal-to-noise ratios matching domain: <span className="font-mono text-teal-500 font-bold">{userIntent?.targetDomain || 'React Systems'}</span>
-            </p>
+            <span className={`text-[10px] font-mono font-bold uppercase tracking-widest ${
+              isDarkMode ? 'text-indigo-400' : 'text-teal-500'
+            }`}>
+              AI MODEL CURATING YOUR FEED
+            </span>
+            <h3 className={`text-xl font-black ${isDarkMode ? 'text-slate-100' : 'text-stone-900'}`}>
+              Analyzing: "{userGoal}"
+            </h3>
+          </div>
+
+          {/* Animated step list */}
+          <div className="flex flex-col gap-2 w-full max-w-sm text-left">
+            {CURATING_STEPS.map((s, i) => (
+              <div
+                key={i}
+                className={`flex items-center gap-3 text-xs font-mono transition-all duration-300 ${
+                  i <= curatingStep ? 'opacity-100' : 'opacity-20'
+                }`}
+              >
+                {i < curatingStep ? (
+                  <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                ) : i === curatingStep ? (
+                  <Loader2 className={`w-4 h-4 shrink-0 animate-spin ${isDarkMode ? 'text-indigo-400' : 'text-teal-500'}`} />
+                ) : (
+                  <div className="w-4 h-4 rounded-full border border-stone-400 shrink-0" />
+                )}
+                <span className={i <= curatingStep
+                  ? isDarkMode ? 'text-slate-200' : 'text-stone-700'
+                  : isDarkMode ? 'text-slate-600' : 'text-stone-400'
+                }>
+                  {s}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* PHASE 2: THE EMBEDDED CURATION FEED */}
+      {/* ─── PHASE 2: 4 CURATED CARDS ───────────────────── */}
       {step === 'feed' && (
-        <div className={`rounded-[2rem] p-6 md:p-10 border shadow-2xl backdrop-blur-xl transition-all opacity-100 duration-500 flex flex-col gap-8 ${
-          isDarkMode 
-            ? 'bg-slate-900/90 border-slate-800 text-slate-100' 
-            : 'bg-white/80 border-stone-100 text-stone-900'
+        <div className={`rounded-[2rem] border shadow-2xl backdrop-blur-xl flex flex-col gap-8 p-8 md:p-10 ${
+          isDarkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-stone-100 shadow-xl'
         }`}>
-          {/* Header & Reset Button */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-stone-200/50">
+
+          {/* Feed Header */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-              <div className="flex items-center gap-2 text-violet-500">
-                <Sparkles className="w-5 h-5 animate-pulse" />
-                <span className="text-[10px] font-extrabold tracking-widest font-mono uppercase">PHASE 2 • AUTONOMOUS CURATION STREAM</span>
+              <div className={`flex items-center gap-2 mb-1 ${isDarkMode ? 'text-violet-400' : 'text-violet-600'}`}>
+                <Sparkles className="w-4 h-4" />
+                <span className="text-[10px] font-extrabold tracking-widest font-mono uppercase">
+                  AI CURATED • 4 FORMATS MATCHED TO YOUR GOAL
+                </span>
               </div>
-              <h2 className="text-2xl font-black tracking-tight mt-1">High-Signal Targeted Stream</h2>
+              <h2 className={`text-2xl font-black tracking-tight ${isDarkMode ? 'text-slate-100' : 'text-stone-900'}`}>
+                Your Personalized Feed
+              </h2>
+              <p className={`text-xs mt-1 max-w-lg ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
+                Based on goal: <span className={`font-mono font-bold ${isDarkMode ? 'text-teal-400' : 'text-teal-600'}`}>"{userGoal}"</span>
+              </p>
             </div>
 
             <button
-              onClick={handleResetFlow}
-              className={`px-4 py-2 rounded-2xl border text-xs font-extrabold flex items-center gap-2 transition cursor-pointer ${
-                isDarkMode 
-                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white' 
-                  : 'bg-stone-100 border-stone-200 text-stone-700 hover:bg-stone-200'
+              onClick={handleReset}
+              className={`px-4 py-2.5 rounded-2xl border text-xs font-bold flex items-center gap-2 transition cursor-pointer shrink-0 ${
+                isDarkMode
+                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                  : 'bg-stone-100 border-stone-200 text-stone-600 hover:bg-stone-200'
               }`}
             >
               <RefreshCw className="w-3.5 h-3.5" />
-              <span>Retake Onboarding Check</span>
+              Change Goal
             </button>
           </div>
 
-          {/* 3 FOCUS CARDS WITH EMBEDDED MEDIA */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* CARD 1: YouTube Embedded Video */}
-            <div className={`rounded-3xl p-6 border flex flex-col justify-between gap-5 transition-all hover:shadow-xl ${
-              isDarkMode ? 'bg-slate-950/70 border-slate-800' : 'bg-stone-50/80 border-stone-200/80 shadow-md'
-            }`}>
-              <div className="flex flex-col gap-3">
-                
-                {/* AI Reasoning Badge & Signal Score */}
-                <div className={`p-3 rounded-2xl border text-xs leading-normal flex items-start gap-2 ${
-                  isDarkMode ? 'bg-violet-500/10 border-violet-500/20 text-violet-300' : 'bg-violet-50 border-violet-100 text-violet-900'
-                }`}>
-                  <Brain className="w-4 h-4 shrink-0 mt-0.5 text-violet-500" />
-                  <div>
-                    <span className="font-bold block text-[10px] font-mono uppercase text-violet-500">WHY THIS?</span>
-                    <span>"{curatedMedia[0]?.reasoningBadge || 'A low-energy introduction to React Hooks.'}"</span>
-                  </div>
-                </div>
+          {/* 4 Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {recommendations.map((item, i) => (
+              <MediaCard key={item.id || i} item={item} index={i} isDarkMode={isDarkMode} />
+            ))}
+          </div>
 
-                <div className="flex justify-between items-center mt-1">
-                  <h3 className="font-extrabold text-sm flex items-center gap-2">
-                    <Play className="w-4 h-4 text-violet-500 fill-current" />
-                    <span>{curatedMedia[0]?.title || 'React Hooks Crash Course'}</span>
-                  </h3>
-                  <span className="text-[10px] font-mono text-emerald-600 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                    {curatedMedia[0]?.signalScore || 98}% Signal
-                  </span>
-                </div>
-
-                {/* Direct iFrame YouTube Embed */}
-                <div className="rounded-2xl overflow-hidden aspect-video border border-stone-200/50 shadow-sm bg-black">
-                  <iframe
-                    className="w-full h-full"
-                    src="https://www.youtube-nocookie.com/embed/SqcY0GlETPk"
-                    title="React Hooks Video"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-
-                <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
-                  Watch useState and useEffect explained visually without cognitive overwhelm.
-                </p>
-              </div>
-
-              <div className="flex justify-between items-center text-[10px] font-mono font-bold text-violet-500 pt-2 border-t border-stone-200/40">
-                <span>Direct Site Embed</span>
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-              </div>
-            </div>
-
-            {/* CARD 2: Tall Vertical Short-form Reel Embed */}
-            <div className={`rounded-3xl p-6 border flex flex-col justify-between gap-5 transition-all hover:shadow-xl ${
-              isDarkMode ? 'bg-slate-950/70 border-slate-800' : 'bg-stone-50/80 border-stone-200/80 shadow-md'
-            }`}>
-              <div className="flex flex-col gap-3">
-                
-                {/* AI Reasoning Badge & Signal Score */}
-                <div className={`p-3 rounded-2xl border text-xs leading-normal flex items-start gap-2 ${
-                  isDarkMode ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300' : 'bg-indigo-50 border-indigo-100 text-indigo-900'
-                }`}>
-                  <Brain className="w-4 h-4 shrink-0 mt-0.5 text-indigo-500" />
-                  <div>
-                    <span className="font-bold block text-[10px] font-mono uppercase text-indigo-500">WHY THIS?</span>
-                    <span>"A 60-second syntax refresher."</span>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center mt-1">
-                  <h3 className="font-extrabold text-sm flex items-center gap-2">
-                    <Flame className="w-4 h-4 text-indigo-500" />
-                    <span>60-Sec Short Refresher</span>
-                  </h3>
-                  <span className="text-[10px] font-mono text-emerald-600 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                    95% Signal
-                  </span>
-                </div>
-
-                {/* Mobile Vertical Reel Embed Container */}
-                <div className="rounded-2xl overflow-hidden h-64 border border-stone-200/50 shadow-sm bg-gradient-to-b from-indigo-900 via-slate-950 to-purple-950 flex flex-col items-center justify-center relative p-4 text-center">
-                  <div className="w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center mb-2 animate-bounce">
-                    <Play className="w-5 h-5 fill-current ml-0.5" />
-                  </div>
-                  <span className="text-xs font-bold text-white">Vertical Short-Form Embed</span>
-                  <span className="text-[10px] text-indigo-300 font-mono mt-1">Fast-paced syntax recap</span>
-                </div>
-
-                <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
-                  Quickly reinforce arrow function state setters in 60 seconds.
-                </p>
-              </div>
-
-              <div className="flex justify-between items-center text-[10px] font-mono font-bold text-indigo-500 pt-2 border-t border-stone-200/40">
-                <span>Embedded Short Format</span>
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-              </div>
-            </div>
-
-            {/* CARD 3: Interactive Action Execution */}
-            <div className={`rounded-3xl p-6 border flex flex-col justify-between gap-5 transition-all hover:shadow-xl ${
-              isDarkMode ? 'bg-slate-950/70 border-slate-800' : 'bg-emerald-50/40 border-emerald-200/80 shadow-md'
-            }`}>
-              <div className="flex flex-col gap-3">
-                
-                {/* AI Reasoning Badge & Signal Score */}
-                <div className={`p-3 rounded-2xl border text-xs leading-normal flex items-start gap-2 ${
-                  isDarkMode ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                }`}>
-                  <Brain className="w-4 h-4 shrink-0 mt-0.5 text-emerald-500" />
-                  <div>
-                    <span className="font-bold block text-[10px] font-mono uppercase text-emerald-600">WHY THIS?</span>
-                    <span>"Time to apply what you just watched."</span>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center mt-1">
-                  <h3 className="font-extrabold text-sm flex items-center gap-2">
-                    <Code className="w-4 h-4 text-emerald-600" />
-                    <span>Active Execution Sandbox</span>
-                  </h3>
-                  <span className="text-[10px] font-mono text-emerald-600 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-                    94% Signal
-                  </span>
-                </div>
-
-                {/* Interactive Code Textarea */}
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-mono font-bold uppercase text-stone-400">Write a simple useState hook below:</label>
-                  <textarea
-                    rows={4}
-                    value={interactiveCode}
-                    onChange={(e) => setInteractiveCode(e.target.value)}
-                    className={`w-full rounded-2xl p-3 text-xs font-mono focus:outline-none border transition ${
-                      isDarkMode 
-                        ? 'bg-slate-900 border-slate-800 text-emerald-400 focus:border-emerald-500' 
-                        : 'bg-slate-900 border-slate-800 text-emerald-400 focus:border-emerald-400'
-                    }`}
-                  />
-
-                  <button
-                    onClick={() => setCodeSubmitted(true)}
-                    className="w-full py-2.5 rounded-xl bg-emerald-500 text-white font-extrabold text-xs shadow-sm hover:bg-emerald-600 transition cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Evaluate Hook Code</span>
-                  </button>
-
-                  {codeSubmitted && (
-                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 text-xs font-semibold flex items-center gap-2 animate-fade-in">
-                      <CheckCircle className="w-4 h-4 shrink-0" />
-                      <span>Code Verified! useState hook syntax is valid.</span>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-
-              <div className="flex justify-between items-center text-[10px] font-mono font-bold text-emerald-600 pt-2 border-t border-stone-200/40">
-                <span>Hands-on Code Practice</span>
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-              </div>
-            </div>
-
+          {/* Bottom CTA Row */}
+          <div className={`pt-4 border-t flex items-center justify-between text-xs font-mono ${
+            isDarkMode ? 'border-slate-800 text-slate-500' : 'border-stone-100 text-stone-400'
+          }`}>
+            <span>Signal Evaluation: AI scored each item against your goal intent</span>
+            <button
+              onClick={handleReset}
+              className={`flex items-center gap-1 font-bold hover:underline cursor-pointer ${
+                isDarkMode ? 'text-indigo-400' : 'text-teal-600'
+              }`}
+            >
+              Refine Goal <ChevronRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       )}
-
     </div>
   );
 }
