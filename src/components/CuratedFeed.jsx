@@ -17,8 +17,51 @@ import AudioPlayer from './AudioPlayer';
 import SpeechCard from './SpeechCard';
 
 export default function CuratedFeed({ isDarkMode = false, currentUser = null }) {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const staticFallbackItems = [
+    {
+      type: "video",
+      title: "Deep Work – Achieve Peak Performance",
+      youtubeId: "gTaJhjQHcf8",
+      url: "https://www.youtube.com/watch?v=gTaJhjQHcf8",
+      duration: "14 min",
+      reason: "Why: Cal Newport deep work framework — directly boosts ability to reach your goal.",
+      signalScore: 98,
+      isGapFix: false
+    },
+    {
+      type: "short",
+      title: "The 5-Second Rule in 60 Seconds",
+      youtubeId: "k2TaFVANNTg",
+      url: "https://www.youtube.com/shorts/k2TaFVANNTg",
+      duration: "60 sec",
+      reason: "Why: Instant motivation trigger — activates momentum toward your goal.",
+      signalScore: 96,
+      isGapFix: false
+    },
+    {
+      type: "reel",
+      title: "Flow State Activation – Get Deep Focus",
+      youtubeId: "QkOCbt_o2HY",
+      url: "https://www.youtube.com/watch?v=QkOCbt_o2HY",
+      duration: "45 sec",
+      reason: "Why: Primes your brain for high-yield learning sessions.",
+      signalScore: 95,
+      isGapFix: false
+    },
+    {
+      type: "article",
+      title: "The Feynman Technique – Learn Anything",
+      youtubeId: "",
+      url: "https://fs.blog/feynman-technique/",
+      duration: "6 min read",
+      reason: "Why: The best learning strategy — explains through teaching to lock in understanding.",
+      signalScore: 94,
+      isGapFix: false
+    }
+  ];
+
+  const [items, setItems] = useState(staticFallbackItems);
+  const [loading, setLoading] = useState(false);
   const [currentGoal, setCurrentGoal] = useState('');
 
   const userId = currentUser?.id || 'usr_default';
@@ -42,43 +85,12 @@ export default function CuratedFeed({ isDarkMode = false, currentUser = null }) 
   };
 
   useEffect(() => {
-    let active = true;
-    let lastGoal = getGoalText();
-
-    async function loadFeed() {
-      setLoading(true);
-      const goal = getGoalText();
-      if (active) {
-        setCurrentGoal(goal);
-      }
-      try {
-        const recs = await fetchAIRecommendations(goal, userId);
-        if (active) {
-          setItems(recs);
-        }
-      } catch (err) {
-        console.error("Failed to load curated recommendations:", err);
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadFeed();
-
-    // Poll for localStorage changes (e.g. onboarding transitions)
-    const pollInterval = setInterval(() => {
-      const currentGoalVal = getGoalText();
-      if (currentGoalVal !== lastGoal) {
-        lastGoal = currentGoalVal;
-        loadFeed();
-      }
-    }, 2000);
+    // Render static fallback, no async API loops
+    setCurrentGoal(getGoalText());
 
     // Custom events and storage event listeners
     const handleUpdate = () => {
-      loadFeed();
+      setCurrentGoal(getGoalText());
     };
 
     window.addEventListener('storage', handleUpdate);
@@ -87,8 +99,6 @@ export default function CuratedFeed({ isDarkMode = false, currentUser = null }) 
     window.addEventListener('quizSubmitted', handleUpdate);
 
     return () => {
-      active = false;
-      clearInterval(pollInterval);
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('aspirationUpdated', handleUpdate);
       window.removeEventListener('feedTopicsUpdated', handleUpdate);

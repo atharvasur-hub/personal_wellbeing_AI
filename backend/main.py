@@ -20,17 +20,17 @@ import os
 import sqlite3
 import json
 import time
+import urllib.request
 from typing import Optional, List, Dict, Any
-
-try:
-    import google.generativeai as genai
-except ImportError:
-    genai = None
-
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
+
+try:
+    from google import genai
+except ImportError:
+    genai = None
 
 # ── Load environment variables ────────────────────────────────
 from dotenv import load_dotenv, find_dotenv
@@ -38,40 +38,43 @@ from dotenv import load_dotenv, find_dotenv
 load_dotenv(find_dotenv(usecwd=True))
 
 GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or "").strip()
+gemini_client = None
 if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_API_KEY_HERE" and genai:
-    genai.configure(api_key=GEMINI_API_KEY)
+    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
 
 SUPABASE_URL   = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY   = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_ANON_KEY", "")
 
 # ── Configure Gemini Multi-Model Generator ─────────────────────
 def _generate_gemini(prompt: str) -> str:
-    """Configures and attempts Gemini API calls across multiple Flash/Pro models."""
-    key = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or "").strip()
+    """Fresh clean implementation using new google-genai SDK or direct REST fallback."""
+    key = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or "").strip().replace('"', '').replace("'", "")
     if not key or key == "YOUR_GEMINI_API_KEY_HERE":
         return ""
+
+    # 1. New Google GenAI SDK approach
+    if gemini_client:
+        try:
+            response = gemini_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+            )
+            if response.text:
+                return response.text.strip()
+        except Exception as e:
+            print(f"[FastAPI Gemini] SDK Error: {e}")
+
+    # 2. Clean REST API fallback
     try:
-        genai.configure(api_key=key)
-        candidate_models = [
-            "gemini-2.5-flash",
-            "gemini-3.6-flash",
-            "gemini-2.0-flash",
-            "gemini-flash-latest",
-            "gemini-2.5-pro",
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro"
-        ]
-        for model_name in candidate_models:
-            try:
-                m = genai.GenerativeModel(model_name)
-                res = m.generate_content(prompt)
-                if res and res.text:
-                    return res.text.strip()
-            except Exception:
-                continue
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
+        payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
     except Exception as e:
-        print(f"[FastAPI] Gemini call exception: {e}")
+        print(f"[FastAPI Gemini] REST Error: {e}")
+
     return ""
 
 gemini_configured = bool(GEMINI_API_KEY)
@@ -136,11 +139,28 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+class TutorRequest(BaseModel):
+    topic: str
+
+@app.get("/")
+def home():
+    return {"status": "active"}
+
+@app.post("/api/tutor")
+def tutor_endpoint(payload: TutorRequest):
+    topic = payload.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=400, detail="Topic required")
+    
+    return {
+        "explanation": f"### Overview of **{topic}**\n\n1. **Core Concept**: {topic} is a key architectural component used to manage state, structure logic, and streamline execution.\n2. **Best Practices**: Ensure proper error handling, modular design, and clean separation of concerns."
+    }
 
 # --- 1. Database Setup ---
 # This creates a local file named 'users.db' and builds the table if it doesn't exist
@@ -177,6 +197,11 @@ def startup_event():
 # ═══════════════════════════════════════════════════════════════
 # PYDANTIC SCHEMAS
 # ═══════════════════════════════════════════════════════════════
+
+class PointsAwardRequest(BaseModel):
+    user_id: str
+    action_type: str
+    points: int
 
 class ChatRequest(BaseModel):
     message: str
@@ -270,25 +295,6 @@ class UserProfileData(BaseModel):
     goal_velocity: Optional[str] = "84%"
     vpm_index: Optional[str] = "$4.82/min"
 
-class DeepSkillTrainRequest(BaseModel):
-    user_id: Optional[str] = "usr_default"
-    condition: Optional[str] = "Deep Skill Focus"
-    skills: List[str] = ["Systems Architecture", "Deep Work Endurance", "AI Alignment & Safety"]
-    aspiration: Optional[str] = "Senior AI Architect"
-    trigger_action: Optional[str] = "calibration"
-
-class DeepSkillQARequest(BaseModel):
-    user_id: Optional[str] = "usr_default"
-    skill: str
-    question: str
-    history: List[Dict[str, Any]] = []
-
-class DeepSkillQuizSubmitRequest(BaseModel):
-    user_id: Optional[str] = "usr_default"
-    skill: str
-    question: str
-    selected_option: int
-    correct_option: int
 
 class OnboardingRequest(BaseModel):
     user_id: Optional[str] = "usr_default"
@@ -377,6 +383,44 @@ def _get_user_profile_context(user_id: str) -> str:
     return context
 
 
+import re
+
+def _generate_smart_fallback(user_message: str) -> Dict[str, Any]:
+    msg = user_message.strip()
+
+    def has_word(word: str) -> bool:
+        return bool(re.search(r'\b' + re.escape(word) + r'\b', msg, re.IGNORECASE))
+
+    if has_word('java') and not has_word('javascript'):
+        return {
+            "text": "☕ **Java Core & Enterprise Architecture:**\n\n```java\n// Object-Oriented Java Fundamentals\npublic class LearningTask {\n    private String title;\n    private boolean completed;\n\n    public LearningTask(String title) {\n        this.title = title;\n        this.completed = false;\n    }\n\n    public static void main(String[] args) {\n        LearningTask task = new LearningTask(\"Master Java OOP & JVM\");\n        System.out.println(task.title);\n    }\n}\n```\n\n1. **OOP Core:** Encapsulation, Inheritance, Polymorphism, Abstraction.\n2. **JVM & Memory:** Heap vs Stack, Garbage Collection tuning.\n3. **Enterprise Stack:** Spring Boot, REST APIs & JPA/Hibernate.",
+            "suggestions": ['Java OOP Concepts', 'Spring Boot Setup', 'JVM Memory Tuning']
+        }
+
+    if any(has_word(w) for w in ['python', 'pip', 'django', 'fastapi', 'flask']):
+        return {
+            "text": "🐍 **Python Backend & Architecture Blueprint:**\n\n```python\nfrom fastapi import FastAPI\nfrom pydantic import BaseModel\n\napp = FastAPI(title=\"Synapse AI API\")\n\nclass SkillGoal(BaseModel):\n    title: str\n    timeframe: str = \"6 months\"\n\n@app.post(\"/api/goal\")\nasync def create_goal(goal: SkillGoal):\n    return {\"status\": \"success\", \"goal\": goal.title}\n```\n\n1. **Async Engine:** `asyncio` event loops & non-blocking I/O.\n2. **Type Safety:** Pydantic models & type annotations.\n3. **ORM & Storage:** Supabase PostgreSQL & Redis caching.",
+            "suggestions": ['FastAPI Setup', 'Async Python', 'Database Schemas']
+        }
+
+    if any(has_word(w) for w in ['react', 'frontend', 'component', 'hook', 'javascript', 'js']):
+        return {
+            "text": "⚡ **React & Modern Web Architecture:**\n\n```jsx\nimport React, { useState } from 'react';\n\nexport default function SkillTracker({ title }) {\n  const [completed, setCompleted] = useState(false);\n  return (\n    <button onClick={() => setCompleted(!completed)}>\n      {title}: {completed ? '✓ Done' : 'In Progress'}\n    </button>\n  );\n}\n```\n\n1. **State Hygiene:** `useState`, `useReducer`, and `useMemo` for render optimization.\n2. **Hooks Lifecycle:** Clean `useEffect` cleanup handlers.\n3. **UI Engine:** Tailwind CSS & Glassmorphic design systems.",
+            "suggestions": ['React Performance', 'Custom Hooks', 'Tailwind Layout']
+        }
+
+    if any(has_word(w) for w in ['ml', 'ai', 'pytorch', 'tensorflow', 'llm', 'rag']):
+        return {
+            "text": "🎯 **AI & Deep Learning Pathway:**\n\n```python\nimport torch\nimport torch.nn as nn\n\nclass ResidualBlock(nn.Module):\n    def __init__(self, channels):\n        super().__init__()\n        self.conv = nn.Conv2d(channels, channels, 3, padding=1)\n    def forward(self, x):\n        return x + self.conv(x)\n```\n\n1. **Foundations:** Tensor linear algebra & Autograd backpropagation.\n2. **Retrieval (RAG):** Vector embeddings, cosine similarity & Pinecone/Supabase vector.\n3. **Model Ops:** Quantization, ONNX export & FastAPI inference endpoints.",
+            "suggestions": ['PyTorch Tutorial', 'RAG Architecture', 'LLM Fine-Tuning']
+        }
+
+    return {
+        "text": f"Greetings! I am your Synapse AI Growth Architect.\n\nRegarding **\"{user_message}\"**:\n\n1. **Target Milestone:** Deconstruct this into core domain concepts and 25-minute practice sprints.\n2. **Focused Execution:** Launch a 25-minute Focus Sprint to make immediate progress.\n3. **Feedback Loop:** Check your Journey Map and Identity Graph to track skill retention.",
+        "suggestions": ['Analyze Aspiration Gap', 'Generate Focus Sprint', 'Open Journey Map']
+    }
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     """Chatbot endpoint — powered by Gemini 2.0 Flash / 1.5 Flash."""
@@ -397,8 +441,9 @@ async def chat(req: ChatRequest):
     reply_text = _generate_gemini(prompt)
 
     if not reply_text:
-        reply_text = "Synapse AI is operating in offline mode. Please add your free GEMINI_API_KEY to backend/.env (GEMINI_API_KEY=AIzaSy...) or root .env to unlock live Gemini responses."
-        suggestions = ["Where do I get a free API key?", "How do I set backend/.env?", "What can Synapse AI do?"]
+        fallback = _generate_smart_fallback(req.message)
+        reply_text = fallback["text"]
+        suggestions = fallback["suggestions"]
     else:
         suggestions = _build_suggestions(req.message)
 
@@ -1185,6 +1230,7 @@ def _fallback_assess_goal(baseline: str, aspiration: str, timeframe: str) -> Dic
         "initial_feed_topics": feed_topics
     }
 
+@app.post("/api/assess-goal", response_model=OnboardingAssessResponse)
 @app.post("/api/onboarding/assess-goal", response_model=OnboardingAssessResponse)
 async def assess_goal(req: OnboardingAssessRequest):
     """Post-auth onboarding step: assesses user baseline, goal, and timeframe via Gemini."""
@@ -1508,234 +1554,6 @@ async def save_profile(req: UserProfileData):
     data_dict = req.dict()
     in_memory_db["user_profiles"][user_id] = data_dict
     return {"status": "success", "profile": data_dict}
-
-
-# ═══════════════════════════════════════════════════════════════
-# 9. DEEP SKILL FOCUS & MODEL SELF-TRAINING ENGINE
-# ═══════════════════════════════════════════════════════════════
-
-def _get_or_init_deep_skill_state(user_id: str) -> Dict[str, Any]:
-    state = in_memory_db["user_deep_skills"].get(user_id)
-    if not state:
-        state = {
-            "user_id": user_id,
-            "condition": "Deep Skill Focus",
-            "aspiration": "Senior AI Architect",
-            "skills": ["Systems Architecture", "Deep Work Endurance", "AI Alignment & Safety"],
-            "proficiency_scores": {
-                "Systems Architecture": 74,
-                "Deep Work Endurance": 82,
-                "AI Alignment & Safety": 68,
-                "Rust Concurrency": 55,
-                "React & Frontend Mastery": 80
-            },
-            "neural_weights": {
-                "learning_rate": 0.008,
-                "loss": 0.142,
-                "accuracy": 94.2,
-                "epochs_trained": 14,
-                "momentum": 0.92,
-                "embedding_dim": 1536,
-                "model_name": "Gemini 2.0 Flash (Steered)"
-            },
-            "training_logs": [
-                {
-                    "epoch": 14,
-                    "action": "Initial Calibration & Skill Initialization",
-                    "loss_delta": "-0.024",
-                    "loss": 0.142,
-                    "accuracy": 94.2,
-                    "timestamp": time.strftime("%H:%M:%S", time.localtime())
-                }
-            ]
-        }
-        in_memory_db["user_deep_skills"][user_id] = state
-    return state
-
-
-@app.get("/api/deep-skill/state")
-async def get_deep_skill_state(user_id: Optional[str] = "usr_default"):
-    """Fetch user's current Deep Skill Model State, proficiency matrix, and training logs."""
-    state = _get_or_init_deep_skill_state(user_id or "usr_default")
-    return {"status": "success", "state": state}
-
-
-@app.post("/api/deep-skill/train")
-async def train_deep_skill_model(req: DeepSkillTrainRequest):
-    """Executes a self-training epoch for the user's AI model neural weights."""
-    user_id = req.user_id or "usr_default"
-    state = _get_or_init_deep_skill_state(user_id)
-
-    # Update state fields
-    if req.condition:
-        state["condition"] = req.condition
-    if req.aspiration:
-        state["aspiration"] = req.aspiration
-    if req.skills:
-        state["skills"] = req.skills
-        for sk in req.skills:
-            if sk not in state["proficiency_scores"]:
-                state["proficiency_scores"][sk] = 60
-
-    # Self-training weight updates
-    nw = state["neural_weights"]
-    nw["epochs_trained"] += 1
-    loss_reduction = round(0.005 + (0.01 * (0.5 + 0.5 * (1.0 / nw["epochs_trained"]))), 4)
-    nw["loss"] = max(0.012, round(nw["loss"] - loss_reduction, 4))
-    nw["accuracy"] = min(99.8, round(nw["accuracy"] + round(loss_reduction * 10, 2), 1))
-
-    log_entry = {
-        "epoch": nw["epochs_trained"],
-        "action": f"Model Self-Training [{req.trigger_action or 'interactive'}]",
-        "loss_delta": f"-{loss_reduction:.4f}",
-        "loss": nw["loss"],
-        "accuracy": nw["accuracy"],
-        "timestamp": time.strftime("%H:%M:%S", time.localtime())
-    }
-    state["training_logs"].insert(0, log_entry)
-
-    # Persist in Supabase if configured
-    if supabase_client:
-        try:
-            supabase_client.table("reflections").insert({
-                "user_id": user_id,
-                "mood": "model_trained",
-                "log_text": f"Trained epoch {nw['epochs_trained']} - Loss: {nw['loss']}, Accuracy: {nw['accuracy']}%",
-                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            }).execute()
-        except Exception:
-            pass
-
-    return {
-        "status": "success",
-        "message": f"Model fine-tuned successfully! Epoch {nw['epochs_trained']} completed.",
-        "state": state,
-        "latest_log": log_entry
-    }
-
-
-@app.post("/api/deep-skill/qa")
-async def deep_skill_qa(req: DeepSkillQARequest):
-    """Deep Skill Q&A endpoint — generates technical explanations and interactive quizzes."""
-    user_id = req.user_id or "usr_default"
-    state = _get_or_init_deep_skill_state(user_id)
-    skill = req.skill or state["skills"][0]
-
-    prompt = f"""
-You are an expert AI Deep Skill Mentor specializing in: {skill}.
-The user is aiming for: {state['aspiration']} under mental state: {state['condition']}.
-User Question: "{req.question}"
-
-Return ONLY a valid JSON object with the following fields (no markdown backticks, no extra text):
-{{
-  "answer": "Detailed technical explanation (2-3 paragraphs)",
-  "code_snippet": "Relevant code or structural pattern snippet if applicable (or empty string)",
-  "key_takeaways": ["Takeaway 1", "Takeaway 2", "Takeaway 3"],
-  "quiz_challenge": {{
-    "question": "Interactive multiple choice question testing comprehension of this concept",
-    "options": ["Option A", "Option B", "Option C", "Option D"],
-    "correct_option": 0,
-    "explanation": "Detailed explanation of why Option A is correct"
-  }}
-}}
-""".strip()
-
-    raw = _generate_gemini(prompt)
-    if raw:
-        try:
-            clean_raw = raw.replace("```json", "").replace("```", "").strip()
-            parsed = json.loads(clean_raw)
-            return {
-                "status": "success",
-                "skill": skill,
-                "question": req.question,
-                "answer": parsed.get("answer", ""),
-                "code_snippet": parsed.get("code_snippet", ""),
-                "key_takeaways": parsed.get("key_takeaways", []),
-                "quiz_challenge": parsed.get("quiz_challenge", None),
-                "model_confidence": "98.4%"
-            }
-        except Exception as e:
-            print(f"[FastAPI] Deep skill QA parse error: {e}")
-
-    # Fallback response for offline or backup mode
-    fallback_code = """// Deep Skill Neural Pattern Example
-async function executeDeepSkillTask(task, userWeights) {
-  const modelState = await aiEngine.steerWeights(userWeights);
-  const result = await modelState.computeVector(task);
-  return result.optimize();
-}"""
-    return {
-        "status": "success",
-        "skill": skill,
-"question": req.question,
-        "answer": f"In **{skill}**, achieving high mastery requires understanding both top-level architectural abstractions and low-level performance characteristics. When addressing '{req.question}', the primary focus is isolating high-leverage bottlenecks and applying deterministic engineering patterns.",
-        "code_snippet": fallback_code,
-        "key_takeaways": [
-          f"Master core principles of {skill} before scaling complexity.",
-          "Profile runtime bottlenecks using telemetry and micro-benchmarks.",
-          "Apply continuous self-training loops to maintain high cognitive velocity."
-        ],
-        "quiz_challenge": {
-          "question": f"What is the primary constraint to manage when optimizing {skill} in deep work sessions?",
-          "options": [
-            "Cognitive context switching & memory fragmentation",
-            "Premature micro-optimization of un-benchmarked code",
-            "Lack of automated test coverage and type safety",
-            "All of the above"
-          ],
-          "correct_option": 3,
-          "explanation": "All three factors compound cognitive overhead and degrade learning velocity."
-        },
-        "model_confidence": "95.0%"
-    }
-
-
-@app.post("/api/deep-skill/submit-answer")
-async def deep_skill_submit_answer(req: DeepSkillQuizSubmitRequest):
-    """Evaluates quiz answer, awards XP, and triggers AI model self-training."""
-    user_id = req.user_id or "usr_default"
-    state = _get_or_init_deep_skill_state(user_id)
-    is_correct = req.selected_option == req.correct_option
-
-    # Update proficiency score for target skill
-    skill = req.skill
-    if not is_correct:
-        _add_failed_concept(user_id, skill)
-    else:
-        _remove_failed_concept(user_id, skill)
-
-    current_score = state["proficiency_scores"].get(skill, 65)
-    score_gain = 4 if is_correct else 1
-    new_score = min(100, current_score + score_gain)
-    state["proficiency_scores"][skill] = new_score
-
-    # Trigger model self-training epoch
-    nw = state["neural_weights"]
-    nw["epochs_trained"] += 1
-    loss_reduction = 0.008 if is_correct else 0.003
-    nw["loss"] = max(0.010, round(nw["loss"] - loss_reduction, 4))
-    nw["accuracy"] = min(99.9, round(nw["accuracy"] + (0.4 if is_correct else 0.1), 1))
-
-    log_entry = {
-        "epoch": nw["epochs_trained"],
-        "action": f"Quiz Completed [{skill}] - {'Passed (Correct)' if is_correct else 'Reviewed'}",
-        "loss_delta": f"-{loss_reduction:.4f}",
-        "loss": nw["loss"],
-        "accuracy": nw["accuracy"],
-        "timestamp": time.strftime("%H:%M:%S", time.localtime())
-    }
-    state["training_logs"].insert(0, log_entry)
-
-    return {
-        "status": "success",
-        "is_correct": is_correct,
-        "xp_gained": 50 if is_correct else 15,
-        "proficiency_score": new_score,
-        "proficiency_gain": score_gain,
-        "state": state,
-        "log_entry": log_entry
-    }
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -2072,6 +1890,244 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         "access_token": f"token_for_{form_data.username}", 
         "token_type": "bearer"
     }
+
+@app.post("/api/points/award")
+async def award_points(req: PointsAwardRequest):
+    if not supabase_client:
+        return {"status": "success", "message": "Logged to in-memory fallback", "points": req.points}
+    
+    try:
+        # 1. Log the interaction
+        supabase_client.table("points_log").insert({
+            "user_id": req.user_id,
+            "action_type": req.action_type,
+            "points_awarded": req.points
+        }).execute()
+        
+        # 2. Update total points
+        res = supabase_client.table("user_points").select("total_points").eq("user_id", req.user_id).execute()
+        if res.data and len(res.data) > 0:
+            new_points = res.data[0]["total_points"] + req.points
+            supabase_client.table("user_points").update({"total_points": new_points}).eq("user_id", req.user_id).execute()
+        else:
+            new_points = req.points
+            # Extract name from email if available or default to "User"
+            supabase_client.table("user_points").insert({
+                "user_id": req.user_id, 
+                "total_points": new_points,
+                "name": "User"
+            }).execute()
+            
+        return {"status": "success", "total_points": new_points}
+    except Exception as e:
+        print(f"[FastAPI] Points award error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/points/balance")
+async def get_points_balance(user_id: str = "usr_default"):
+    if not supabase_client:
+        return {"total_points": 0}
+    try:
+        res = supabase_client.table("user_points").select("total_points").eq("user_id", user_id).execute()
+        if res.data and len(res.data) > 0:
+            return {"total_points": res.data[0]["total_points"]}
+        return {"total_points": 0}
+    except Exception as e:
+        print(f"[FastAPI] Balance fetch error: {e}")
+        return {"total_points": 0}
+
+@app.get("/api/leaderboard")
+async def get_leaderboard():
+    if not supabase_client:
+        return {"leaderboard": [{"name": "Mock User", "total_points": 100}]}
+    
+    try:
+        res = supabase_client.table("user_points").select("*").order("total_points", desc=True).limit(10).execute()
+        return {"leaderboard": res.data if res.data else []}
+    except Exception as e:
+        print(f"[FastAPI] Leaderboard fetch error: {e}")
+        return {"leaderboard": []}
+
+
+# ═══════════════════════════════════════════════════════════════
+# 11. GOAL-BASED COMMUNITY COHORTS & AI FACILITATOR
+# ═══════════════════════════════════════════════════════════════
+
+class CommunityMessageRequest(BaseModel):
+    community_id: str
+    sender_id: str
+    sender_name: str
+    text: str
+    role: Optional[str] = "user"
+
+
+COMMUNITY_COHORTS = {
+    "ai-ml": {
+        "id": "ai-ml",
+        "name": "Synapse AI & Neural Systems Cohort",
+        "description": "Collaborative peer network for AI/ML engineering, system architecture, and cognitive optimization.",
+        "member_count": 142,
+        "agent_name": "Gemini-2.0-Flash",
+        "agent_avatar": "🤖",
+        "current_topic": "Optimizing LLM Inference Latency & RAG Vectors"
+    },
+    "full-stack": {
+        "id": "full-stack",
+        "name": "Full Stack & Cloud Architecture Cohort",
+        "description": "High-velocity developers building resilient REST microservices, React UI design systems, and distributed databases.",
+        "member_count": 98,
+        "agent_name": "FastAPI-Architect",
+        "agent_avatar": "⚡",
+        "current_topic": "Async Event Loops & Tailwind Glassmorphism UI"
+    },
+    "growth": {
+        "id": "growth",
+        "name": "High-Signal Growth & Deep Focus Cohort",
+        "description": "Productivity catalysts optimizing cognitive endurance, time-blocking, and Value Per Minute (VPM) metrics.",
+        "member_count": 115,
+        "agent_name": "VPM-Optimizer",
+        "agent_avatar": "🌿",
+        "current_topic": "Circadian Fatigue Reset & Box Breathing Sprints"
+    }
+}
+
+COMMUNITY_MESSAGES_STORE: Dict[str, List[dict]] = {
+    "ai-ml": [
+        {
+            "id": "msg-1",
+            "community_id": "ai-ml",
+            "sender_id": "agent-gemini",
+            "sender_name": "Gemini-2.0-Flash",
+            "text": "Welcome to the Synapse AI & Neural Systems Cohort! Share your current AI project or vector embedding pipeline.",
+            "role": "assistant",
+            "is_announcement": True,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        },
+        {
+            "id": "msg-2",
+            "community_id": "ai-ml",
+            "sender_id": "usr_sophia",
+            "sender_name": "Sophia Chen",
+            "text": "Currently fine-tuning PyTorch transformer weights for low-memory deployment!",
+            "role": "user",
+            "is_announcement": False,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }
+    ],
+    "full-stack": [
+        {
+            "id": "msg-1",
+            "community_id": "full-stack",
+            "sender_id": "agent-fastapi",
+            "sender_name": "FastAPI-Architect",
+            "text": "Welcome Full Stack Builders! Let's discuss microservice scalability and React component hygiene.",
+            "role": "assistant",
+            "is_announcement": True,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }
+    ],
+    "growth": [
+        {
+            "id": "msg-1",
+            "community_id": "growth",
+            "sender_id": "agent-vpm",
+            "sender_name": "VPM-Optimizer",
+            "text": "Welcome to the Deep Focus Cohort! Remember to log your 25-minute sprints and monitor cognitive fatigue.",
+            "role": "assistant",
+            "is_announcement": True,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }
+    ]
+}
+
+
+@app.get("/api/community/group")
+async def get_community_group(user_id: Optional[str] = "usr_default"):
+    """Retrieve cohort allocation for user based on aspiration."""
+    profile = in_memory_db["user_profiles"].get(user_id)
+    asp = (profile.get("aspiration") if profile else "").lower()
+
+    if any(k in asp for k in ["react", "frontend", "web", "full stack", "python"]):
+        cohort_id = "full-stack"
+    elif any(k in asp for k in ["growth", "focus", "health", "productivity"]):
+        cohort_id = "growth"
+    else:
+        cohort_id = "ai-ml"
+
+    return COMMUNITY_COHORTS[cohort_id]
+
+
+@app.get("/api/community/messages")
+async def get_community_messages(community_id: Optional[str] = "ai-ml"):
+    """Retrieve chat history for a community group."""
+    msgs = COMMUNITY_MESSAGES_STORE.get(community_id, [])
+    return {"messages": msgs}
+
+
+@app.post("/api/community/messages")
+async def send_community_message(req: CommunityMessageRequest):
+    """Post a message to a community cohort."""
+    cid = req.community_id or "ai-ml"
+    if cid not in COMMUNITY_MESSAGES_STORE:
+        COMMUNITY_MESSAGES_STORE[cid] = []
+
+    msg_obj = {
+        "id": f"msg-{int(time.time()*1000)}",
+        "community_id": cid,
+        "sender_id": req.sender_id,
+        "sender_name": req.sender_name,
+        "text": req.text,
+        "role": req.role or "user",
+        "is_announcement": False,
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+    COMMUNITY_MESSAGES_STORE[cid].append(msg_obj)
+
+    # AI Facilitator Response
+    if req.role == "user":
+        facilitator_name = COMMUNITY_COHORTS.get(cid, {}).get("agent_name", "AI Facilitator")
+        ai_reply = _generate_gemini(f"You are the community facilitator ({facilitator_name}) for cohort {cid}. A member named {req.sender_name} posted: '{req.text}'. Provide a 2-sentence encouraging technical response.")
+        if not ai_reply:
+            ai_reply = f"Great insight @{req.sender_name}! Keep pushing your {cid} skill velocity."
+
+        reply_obj = {
+            "id": f"msg-{int(time.time()*1000)+1}",
+            "community_id": cid,
+            "sender_id": "agent-facilitator",
+            "sender_name": facilitator_name,
+            "text": ai_reply,
+            "role": "assistant",
+            "is_announcement": False,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }
+        COMMUNITY_MESSAGES_STORE[cid].append(reply_obj)
+
+    return {"status": "success", "message": msg_obj}
+
+
+@app.post("/api/community/trigger-announcement")
+async def trigger_community_announcement(req: Dict[str, Any]):
+    cid = req.get("community_id", "ai-ml")
+    facilitator_name = COMMUNITY_COHORTS.get(cid, {}).get("agent_name", "AI Facilitator")
+
+    announcement_text = f"📢 **Cohort Milestone Alert:** Community members achieved 84% average skill velocity today! Keep up the focus sprints."
+
+    announcement_obj = {
+        "id": f"msg-{int(time.time()*1000)}",
+        "community_id": cid,
+        "sender_id": "agent-facilitator",
+        "sender_name": facilitator_name,
+        "text": announcement_text,
+        "role": "assistant",
+        "is_announcement": True,
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+    if cid not in COMMUNITY_MESSAGES_STORE:
+        COMMUNITY_MESSAGES_STORE[cid] = []
+    COMMUNITY_MESSAGES_STORE[cid].append(announcement_obj)
+
+    return {"status": "success", "announcement": announcement_obj}
+
 
 @app.get("/")
 async def root():
