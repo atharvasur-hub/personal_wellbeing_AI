@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Bot, Send, Sparkles, Play, CheckCircle, Code, Brain, RefreshCw, Flame, ExternalLink } from 'lucide-react';
+import { Bot, Send, Sparkles, Play, CheckCircle, Code, Brain, RefreshCw, Flame } from 'lucide-react';
+import { analyzeUserIntent, listAutonomousCurations } from '../lib/mlEngine';
+import { saveUserAspirationToSupabase } from '../lib/supabaseClient';
 
-export default function AgenticOnboardingFlow({ isDarkMode = false, onComplete }) {
+export default function AgenticOnboardingFlow({ isDarkMode = false }) {
   // Step state: 'chat' | 'curating' | 'feed'
   const [step, setStep] = useState('chat');
   const [messages, setMessages] = useState([
@@ -12,22 +14,42 @@ export default function AgenticOnboardingFlow({ isDarkMode = false, onComplete }
     }
   ]);
   const [userInput, setUserInput] = useState('');
+  const [userIntent, setUserIntent] = useState(null);
+  const [curatedMedia, setCuratedMedia] = useState([]);
   const [interactiveCode, setInteractiveCode] = useState("const [count, setCount] = useState(0);");
   const [codeSubmitted, setCodeSubmitted] = useState(false);
 
-  const handleSendMessage = (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!userInput.trim()) return;
 
+    const textToSend = userInput;
     const newMessages = [
       ...messages,
-      { id: Date.now(), role: 'user', text: userInput }
+      { id: Date.now(), role: 'user', text: textToSend }
     ];
     setMessages(newMessages);
     setUserInput('');
 
+    // Trigger ML Intent & Behavior Analysis (Pillar 1)
+    const intentResult = analyzeUserIntent(textToSend, 'focused', 'low');
+    setUserIntent(intentResult);
+
+    // Save Intent to Supabase PostgreSQL per user
+    saveUserAspirationToSupabase({
+      primary_goal: textToSend,
+      current_mood: intentResult.currentMood,
+      fatigue_level: intentResult.fatigueLevel,
+      intent_vector: { domain: intentResult.targetDomain, energy: intentResult.cognitiveEnergyScore }
+    });
+
     // Trigger Phase 1 ➔ Phase 2 Transition (Simulate 2-second AI Curation)
     setStep('curating');
+    
+    // Autonomous Curation (Pillar 3)
+    const curatedItems = listAutonomousCurations(intentResult);
+    setCuratedMedia(curatedItems);
+
     setTimeout(() => {
       setStep('feed');
     }, 2000);
@@ -43,6 +65,7 @@ export default function AgenticOnboardingFlow({ isDarkMode = false, onComplete }
       }
     ]);
     setUserInput('');
+    setUserIntent(null);
     setCodeSubmitted(false);
   };
 
@@ -66,11 +89,11 @@ export default function AgenticOnboardingFlow({ isDarkMode = false, onComplete }
               </div>
               <div>
                 <h2 className="text-lg font-black tracking-tight flex items-center gap-2">
-                  <span>SYNAPSE ONBOARDING BOT</span>
+                  <span>SYNAPSE INTENT ANALYZER</span>
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
                 </h2>
                 <p className={`text-xs font-mono ${isDarkMode ? 'text-slate-400' : 'text-stone-400'}`}>
-                  Phase 1 of 2 • Cognitive Baseline Check
+                  Phase 1 of 2 • Intent & Behavior Analysis
                 </p>
               </div>
             </div>
@@ -146,7 +169,7 @@ export default function AgenticOnboardingFlow({ isDarkMode = false, onComplete }
                   isDarkMode ? 'bg-gradient-to-r from-indigo-500 to-violet-600' : 'bg-gradient-to-r from-teal-400 to-cyan-500'
                 }`}
               >
-                <span>Send</span>
+                <span>Send Intent</span>
                 <Send className="w-4 h-4" />
               </button>
             </form>
@@ -167,9 +190,9 @@ export default function AgenticOnboardingFlow({ isDarkMode = false, onComplete }
           </div>
 
           <div className="flex flex-col gap-2">
-            <h3 className="text-xl font-black tracking-tight">Curating Your Personalized Media Feed...</h3>
+            <h3 className="text-xl font-black tracking-tight">Autonomous Curation & Signal Scoring...</h3>
             <p className={`text-xs max-w-md ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
-              Synapse Neural Compiler is selecting 3 low-fatigue embedded videos & interactive tools based on your goal.
+              Evaluating content signal-to-noise ratios matching domain: <span className="font-mono text-teal-500 font-bold">{userIntent?.targetDomain || 'React Systems'}</span>
             </p>
           </div>
         </div>
@@ -187,9 +210,9 @@ export default function AgenticOnboardingFlow({ isDarkMode = false, onComplete }
             <div>
               <div className="flex items-center gap-2 text-violet-500">
                 <Sparkles className="w-5 h-5 animate-pulse" />
-                <span className="text-[10px] font-extrabold tracking-widest font-mono uppercase">PHASE 2 • EMBEDDED CURATION</span>
+                <span className="text-[10px] font-extrabold tracking-widest font-mono uppercase">PHASE 2 • AUTONOMOUS CURATION STREAM</span>
               </div>
-              <h2 className="text-2xl font-black tracking-tight mt-1">Targeted Learning Stream</h2>
+              <h2 className="text-2xl font-black tracking-tight mt-1">High-Signal Targeted Stream</h2>
             </div>
 
             <button
@@ -214,23 +237,25 @@ export default function AgenticOnboardingFlow({ isDarkMode = false, onComplete }
             }`}>
               <div className="flex flex-col gap-3">
                 
-                {/* AI Reasoning Badge */}
+                {/* AI Reasoning Badge & Signal Score */}
                 <div className={`p-3 rounded-2xl border text-xs leading-normal flex items-start gap-2 ${
                   isDarkMode ? 'bg-violet-500/10 border-violet-500/20 text-violet-300' : 'bg-violet-50 border-violet-100 text-violet-900'
                 }`}>
                   <Brain className="w-4 h-4 shrink-0 mt-0.5 text-violet-500" />
                   <div>
                     <span className="font-bold block text-[10px] font-mono uppercase text-violet-500">WHY THIS?</span>
-                    <span>"A low-energy introduction to React Hooks."</span>
+                    <span>"{curatedMedia[0]?.reasoningBadge || 'A low-energy introduction to React Hooks.'}"</span>
                   </div>
                 </div>
 
                 <div className="flex justify-between items-center mt-1">
                   <h3 className="font-extrabold text-sm flex items-center gap-2">
                     <Play className="w-4 h-4 text-violet-500 fill-current" />
-                    <span>React Hooks Crash Course</span>
+                    <span>{curatedMedia[0]?.title || 'React Hooks Crash Course'}</span>
                   </h3>
-                  <span className="text-[10px] font-mono text-stone-400 font-bold">15 min</span>
+                  <span className="text-[10px] font-mono text-emerald-600 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                    {curatedMedia[0]?.signalScore || 98}% Signal
+                  </span>
                 </div>
 
                 {/* Direct iFrame YouTube Embed */}
@@ -261,7 +286,7 @@ export default function AgenticOnboardingFlow({ isDarkMode = false, onComplete }
             }`}>
               <div className="flex flex-col gap-3">
                 
-                {/* AI Reasoning Badge */}
+                {/* AI Reasoning Badge & Signal Score */}
                 <div className={`p-3 rounded-2xl border text-xs leading-normal flex items-start gap-2 ${
                   isDarkMode ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300' : 'bg-indigo-50 border-indigo-100 text-indigo-900'
                 }`}>
@@ -277,19 +302,18 @@ export default function AgenticOnboardingFlow({ isDarkMode = false, onComplete }
                     <Flame className="w-4 h-4 text-indigo-500" />
                     <span>60-Sec Short Refresher</span>
                   </h3>
-                  <span className="text-[10px] font-mono text-stone-400 font-bold">60 sec</span>
+                  <span className="text-[10px] font-mono text-emerald-600 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                    95% Signal
+                  </span>
                 </div>
 
-                {/* Mobile Vertical Reel Embed Placeholder / iFrame */}
+                {/* Mobile Vertical Reel Embed Container */}
                 <div className="rounded-2xl overflow-hidden h-64 border border-stone-200/50 shadow-sm bg-gradient-to-b from-indigo-900 via-slate-950 to-purple-950 flex flex-col items-center justify-center relative p-4 text-center">
                   <div className="w-10 h-10 rounded-full bg-white/20 text-white flex items-center justify-center mb-2 animate-bounce">
                     <Play className="w-5 h-5 fill-current ml-0.5" />
                   </div>
                   <span className="text-xs font-bold text-white">Vertical Short-Form Embed</span>
                   <span className="text-[10px] text-indigo-300 font-mono mt-1">Fast-paced syntax recap</span>
-                  <div className="absolute bottom-3 right-3 px-2 py-1 rounded-md bg-black/60 text-white text-[9px] font-mono">
-                    Reel #104
-                  </div>
                 </div>
 
                 <p className={`text-xs leading-relaxed ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
@@ -309,7 +333,7 @@ export default function AgenticOnboardingFlow({ isDarkMode = false, onComplete }
             }`}>
               <div className="flex flex-col gap-3">
                 
-                {/* AI Reasoning Badge */}
+                {/* AI Reasoning Badge & Signal Score */}
                 <div className={`p-3 rounded-2xl border text-xs leading-normal flex items-start gap-2 ${
                   isDarkMode ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-900'
                 }`}>
@@ -325,7 +349,9 @@ export default function AgenticOnboardingFlow({ isDarkMode = false, onComplete }
                     <Code className="w-4 h-4 text-emerald-600" />
                     <span>Active Execution Sandbox</span>
                   </h3>
-                  <span className="text-[10px] font-mono text-emerald-600 font-bold">Interactive</span>
+                  <span className="text-[10px] font-mono text-emerald-600 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                    94% Signal
+                  </span>
                 </div>
 
                 {/* Interactive Code Textarea */}

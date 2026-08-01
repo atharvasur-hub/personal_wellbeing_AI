@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import CuratedFeed from './CuratedFeed';
 import AgenticOnboardingFlow from './AgenticOnboardingFlow';
+import HabitSteeringModal from './HabitSteeringModal';
 import { 
   fetchChatHistoryFromSupabase, 
   saveChatMessageToSupabase, 
@@ -51,6 +52,7 @@ export default function AppLayout({ currentUser, onLogout }) {
   const [showReflection, setShowReflection] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showAIChatInterface, setShowAIChatInterface] = useState(false);
+  const [showHabitModal, setShowHabitModal] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   
   // Dynamic user data from Auth
@@ -379,6 +381,19 @@ export default function AppLayout({ currentUser, onLogout }) {
           </div>
 
           <div className="flex items-center gap-3 relative">
+            <button
+              onClick={() => setShowHabitModal(true)}
+              className={`px-3 py-2 rounded-full border shadow-sm flex items-center gap-1.5 text-xs font-extrabold transition cursor-pointer ${
+                isDarkMode 
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20' 
+                  : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+              }`}
+              title="Test Digital Guardian Habit Intercept"
+            >
+              <ShieldCheck className="w-4 h-4 text-amber-500" />
+              <span className="hidden md:inline">Test Digital Guardian</span>
+            </button>
+
             {onLogout && (
               <button
                 onClick={onLogout}
@@ -1030,6 +1045,13 @@ export default function AppLayout({ currentUser, onLogout }) {
         </div>
       </main>
 
+      {/* PROACTIVE DIGITAL GUARDIAN INTERCEPT MODAL */}
+      <HabitSteeringModal
+        isOpen={showHabitModal}
+        onClose={() => setShowHabitModal(false)}
+        isDarkMode={isDarkMode}
+      />
+
       {/* FLOATING AI CHATBOT BUBBLE */}
       <button
         onClick={() => setShowAIChatInterface(true)}
@@ -1152,7 +1174,7 @@ export default function AppLayout({ currentUser, onLogout }) {
                   <Compass className="w-4 h-4" />
                 </div>
                 <div>
-                  <h4 className={`text-xs font-bold transition ${isDarkMode ? 'text-slate-200 group-hover:text-indigo-400' : 'text-stone-800 group-hover:text-indigo-600'}`}>Trajectory Simulator</h4>
+                  <h4 className={`text-xs font-bold transition ${isDarkMode ? 'text-slate-200 group-hover:text-indigo-400' : 'text-stone-800 group-hover:text-teal-600'}`}>Trajectory Simulator</h4>
                   <p className={`text-[10px] mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-stone-400'}`}>Project passive vs active paths</p>
                 </div>
               </button>

@@ -13,7 +13,6 @@ export const supabase = (supabaseUrl && supabaseAnonKey)
 // SUPABASE AUTHENTICATION HELPERS
 // ==========================================
 
-// Sign Up with Email & Password
 export async function signUpWithEmail(email, password, displayName = 'Atharva Sur') {
   if (!supabase) {
     return { user: { email, user_metadata: { display_name: displayName } }, error: null };
@@ -29,13 +28,12 @@ export async function signUpWithEmail(email, password, displayName = 'Atharva Su
 
     if (error) return { user: null, error: error.message };
 
-    // Create entry in public.profiles table if user created successfully
     if (data?.user) {
       await supabase.from('profiles').upsert([{
         user_id: data.user.id,
         display_name: displayName,
         current_role: 'Growth Catalyst • Tier 3'
-      }]);
+      }], { onConflict: 'user_id' });
     }
 
     return { user: data.user, error: null };
@@ -44,7 +42,6 @@ export async function signUpWithEmail(email, password, displayName = 'Atharva Su
   }
 }
 
-// Log In with Email & Password
 export async function signInWithEmail(email, password) {
   if (!supabase) {
     return { user: { email, user_metadata: { display_name: email.split('@')[0] } }, error: null };
@@ -61,7 +58,6 @@ export async function signInWithEmail(email, password) {
   }
 }
 
-// Log In / Sign Up with Google OAuth Account
 export async function signInWithGoogle() {
   if (!supabase) {
     return { 
@@ -76,10 +72,10 @@ export async function signInWithGoogle() {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
+        queryParams: { prompt: 'select_account' },
         redirectTo: window.location.origin
       }
     });
-    
     if (error) return { user: null, error: error.message };
     return { user: data, error: null };
   } catch (err) {
@@ -87,7 +83,6 @@ export async function signInWithGoogle() {
   }
 }
 
-// Subscribe to Supabase Auth State Changes (Handles Google OAuth Redirect)
 export function subscribeToAuthState(onUserChanged) {
   if (!supabase) return () => {};
   
@@ -96,7 +91,6 @@ export function subscribeToAuthState(onUserChanged) {
       const user = session.user;
       const displayName = user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0];
       
-      // Ensure Google profile exists in database
       await supabase.from('profiles').upsert([{
         user_id: user.id,
         display_name: displayName,
@@ -116,7 +110,6 @@ export function subscribeToAuthState(onUserChanged) {
   return () => subscription?.unsubscribe();
 }
 
-// Get Current Logged In User
 export async function getCurrentUser() {
   if (!supabase) return null;
   try {
@@ -132,7 +125,6 @@ export async function getCurrentUser() {
   }
 }
 
-// Log Out
 export async function signOutUser() {
   if (!supabase) return;
   try {
@@ -143,9 +135,40 @@ export async function signOutUser() {
 }
 
 // ==========================================
-// SUPABASE DATABASE HELPERS
+// ML & PER-USER DATABASE HELPERS
 // ==========================================
 
+// Save User Aspiration / Intent
+export async function saveUserAspirationToSupabase(aspirationData) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('user_aspirations')
+      .insert([aspirationData])
+      .select();
+    if (error) console.warn('Supabase aspiration error:', error.message);
+    return data;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Save Habit Steering Intercept Log
+export async function saveHabitSteeringLogToSupabase(logData) {
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('habit_steering_logs')
+      .insert([logData])
+      .select();
+    if (error) console.warn('Supabase habit log error:', error.message);
+    return data;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Fetch Chat History
 export async function fetchChatHistoryFromSupabase() {
   if (!supabase) return null;
   try {
@@ -153,7 +176,6 @@ export async function fetchChatHistoryFromSupabase() {
       .from('chat_messages')
       .select('*')
       .order('created_at', { ascending: true });
-    
     if (error) return null;
     return data;
   } catch (err) {
@@ -161,6 +183,7 @@ export async function fetchChatHistoryFromSupabase() {
   }
 }
 
+// Save Chat Message
 export async function saveChatMessageToSupabase(role, text, suggestions = []) {
   if (!supabase) return null;
   try {
@@ -168,14 +191,13 @@ export async function saveChatMessageToSupabase(role, text, suggestions = []) {
       .from('chat_messages')
       .insert([{ role, text, suggestions }])
       .select();
-
-    if (error) console.warn('Supabase insert chat error:', error.message);
     return data;
   } catch (err) {
     return null;
   }
 }
 
+// Clear Chat History
 export async function clearChatHistoryInSupabase() {
   if (!supabase) return null;
   try {
@@ -188,6 +210,7 @@ export async function clearChatHistoryInSupabase() {
   }
 }
 
+// Save Reflection
 export async function saveReflectionToSupabase(mood, log_text) {
   if (!supabase) return null;
   try {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Play, BookOpen, Code, Brain, Clock, ExternalLink, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Play, BookOpen, Code, Brain, Clock, ExternalLink, ArrowRight, Activity, ShieldCheck } from 'lucide-react';
 
 export default function CuratedFeed({ isDarkMode = false }) {
   return (
@@ -17,30 +17,40 @@ export default function CuratedFeed({ isDarkMode = false }) {
       }`} />
 
       {/* Component Header */}
-      <div className="flex flex-col gap-1.5 mb-8">
-        <div className="flex items-center gap-2.5">
-          <div className={`p-2 rounded-2xl ${
-            isDarkMode ? 'bg-violet-500/15 text-violet-400' : 'bg-violet-100 text-violet-600'
-          }`}>
-            <Sparkles className="w-5 h-5 animate-pulse" />
-          </div>
-          <div>
-            <span className="text-[10px] font-extrabold tracking-widest font-mono uppercase text-violet-500 block">
-              PERSONALIZED SYNAPSE FEED
-            </span>
-            <h2 className={`text-xl font-black tracking-tight ${
-              isDarkMode ? 'text-white' : 'text-stone-900'
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2.5">
+            <div className={`p-2 rounded-2xl ${
+              isDarkMode ? 'bg-violet-500/15 text-violet-400' : 'bg-violet-100 text-violet-600'
             }`}>
-              AI CURATED FOR YOU
-            </h2>
+              <Sparkles className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <span className="text-[10px] font-extrabold tracking-widest font-mono uppercase text-violet-500 block">
+                CONTENT SIGNAL EVALUATION ENGINE
+              </span>
+              <h2 className={`text-xl font-black tracking-tight ${
+                isDarkMode ? 'text-white' : 'text-stone-900'
+              }`}>
+                AI CURATED FOR YOU
+              </h2>
+            </div>
           </div>
+
+          <p className={`text-xs leading-relaxed max-w-2xl mt-1 ${
+            isDarkMode ? 'text-slate-400' : 'text-stone-500'
+          }`}>
+            Scored for high signal-to-noise ratio based on your current fatigue logs and React hooks goal.
+          </p>
         </div>
 
-        <p className={`text-xs leading-relaxed max-w-2xl mt-1 ${
-          isDarkMode ? 'text-slate-400' : 'text-stone-500'
+        {/* Overall Signal Score Badge */}
+        <div className={`px-4 py-2 rounded-2xl border text-xs font-mono font-bold flex items-center gap-2 ${
+          isDarkMode ? 'bg-violet-500/10 border-violet-500/20 text-violet-300' : 'bg-violet-50 border-violet-100 text-violet-700'
         }`}>
-          Based on your low energy logs today and your goal to master React hooks...
-        </p>
+          <Activity className="w-4 h-4 text-violet-500" />
+          <span>Avg Signal Score: 96%</span>
+        </div>
       </div>
 
       {/* 3 Media Cards Grid */}
@@ -54,7 +64,7 @@ export default function CuratedFeed({ isDarkMode = false }) {
         }`}>
           
           <div className="flex flex-col gap-3">
-            {/* Media Type Badge & Duration */}
+            {/* Media Type Badge & Signal Ratio */}
             <div className="flex justify-between items-center">
               <span className={`px-3 py-1 rounded-full text-[10px] font-bold font-mono uppercase flex items-center gap-1.5 ${
                 isDarkMode ? 'bg-violet-500/15 text-violet-300 border border-violet-500/20' : 'bg-violet-50 text-violet-700 border border-violet-100'
@@ -62,11 +72,8 @@ export default function CuratedFeed({ isDarkMode = false }) {
                 <Play className="w-3 h-3 fill-current" />
                 The Core Concept
               </span>
-              <span className={`text-[10px] font-mono font-bold flex items-center gap-1 ${
-                isDarkMode ? 'text-slate-500' : 'text-stone-400'
-              }`}>
-                <Clock className="w-3 h-3" />
-                12 min
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                98% Signal Ratio
               </span>
             </div>
 
@@ -77,7 +84,7 @@ export default function CuratedFeed({ isDarkMode = false }) {
                 <Play className="w-5 h-5 fill-current ml-0.5" />
               </div>
               <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/70 text-white font-mono text-[9px] font-bold backdrop-blur-xs">
-                YouTube
+                YouTube • 12 min
               </span>
             </div>
 
@@ -116,7 +123,7 @@ export default function CuratedFeed({ isDarkMode = false }) {
         }`}>
           
           <div className="flex flex-col gap-3">
-            {/* Media Type Badge & Read Time */}
+            {/* Media Type Badge & Signal Ratio */}
             <div className="flex justify-between items-center">
               <span className={`px-3 py-1 rounded-full text-[10px] font-bold font-mono uppercase flex items-center gap-1.5 ${
                 isDarkMode ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/20' : 'bg-indigo-50 text-indigo-700 border border-indigo-100'
@@ -124,11 +131,8 @@ export default function CuratedFeed({ isDarkMode = false }) {
                 <BookOpen className="w-3 h-3" />
                 Deep Dive
               </span>
-              <span className={`text-[10px] font-mono font-bold flex items-center gap-1 ${
-                isDarkMode ? 'text-slate-500' : 'text-stone-400'
-              }`}>
-                <Clock className="w-3 h-3" />
-                5 min read
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                95% Signal Ratio
               </span>
             </div>
 
@@ -146,8 +150,9 @@ export default function CuratedFeed({ isDarkMode = false }) {
               }`}>
                 "State isn't just data—it is a snapshot of your component UI over time."
               </p>
-              <div className="flex justify-end">
-                <ExternalLink className={`w-3.5 h-3.5 ${isDarkMode ? 'text-slate-500' : 'text-stone-400'}`} />
+              <div className="flex justify-between items-center text-[9px] font-mono text-stone-400">
+                <span>5 min read</span>
+                <ExternalLink className="w-3.5 h-3.5" />
               </div>
             </div>
 
@@ -186,7 +191,7 @@ export default function CuratedFeed({ isDarkMode = false }) {
         }`}>
           
           <div className="flex flex-col gap-3">
-            {/* Media Type Badge & Action Tag */}
+            {/* Media Type Badge & Signal Ratio */}
             <div className="flex justify-between items-center">
               <span className={`px-3 py-1 rounded-full text-[10px] font-bold font-mono uppercase flex items-center gap-1.5 ${
                 isDarkMode ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
@@ -194,17 +199,13 @@ export default function CuratedFeed({ isDarkMode = false }) {
                 <Code className="w-3 h-3" />
                 Active Execution
               </span>
-              <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
-                isDarkMode ? 'bg-emerald-950 text-emerald-400' : 'bg-emerald-100 text-emerald-700'
-              }`}>
-                Sandbox Tool
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                94% Signal Ratio
               </span>
             </div>
 
             {/* Interactive Coding Preview Banner */}
-            <div className={`rounded-2xl p-4 border font-mono text-[11px] leading-relaxed flex flex-col justify-between h-28 relative overflow-hidden ${
-              isDarkMode ? 'bg-slate-900 border-slate-800 text-emerald-400' : 'bg-slate-900 border-slate-800 text-emerald-400'
-            }`}>
+            <div className="rounded-2xl p-4 border font-mono text-[11px] leading-relaxed flex flex-col justify-between h-28 relative overflow-hidden bg-slate-900 border-slate-800 text-emerald-400">
               <div className="flex items-center justify-between text-[9px] text-slate-400 pb-1 border-b border-slate-800">
                 <span>useDebounce.js</span>
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
@@ -213,7 +214,7 @@ export default function CuratedFeed({ isDarkMode = false }) {
                 const debounced = useDebounce(value, 300);
               </p>
               <div className="flex justify-between items-center text-[10px] text-emerald-400 font-bold">
-                <span>Launch Interactive Sandbox</span>
+                <span>Launch Sandbox Tool</span>
                 <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
               </div>
             </div>
