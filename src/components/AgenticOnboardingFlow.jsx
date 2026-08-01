@@ -6,29 +6,30 @@ import {
 } from 'lucide-react';
 import { fetchAIRecommendations } from '../lib/contentRecommender';
 import { saveAspirationToBackend } from '../lib/backendApi';
+import { saveUserAspirationToSupabase } from '../lib/supabaseClient';
 
 // Media type config
 const MEDIA_CONFIG = {
   video: {
-    label: '📹 Video',
+    label: '📹 Video Tutorial',
     badgeBg: isDark => isDark ? 'bg-violet-500/15 border-violet-500/20 text-violet-300' : 'bg-violet-50 border-violet-100 text-violet-700',
     accentColor: 'text-violet-500',
     embedPrefix: 'https://www.youtube-nocookie.com/embed/'
   },
   short: {
-    label: '⚡ Short',
+    label: '⚡ Short Clip',
     badgeBg: isDark => isDark ? 'bg-cyan-500/15 border-cyan-500/20 text-cyan-300' : 'bg-cyan-50 border-cyan-100 text-cyan-700',
     accentColor: 'text-cyan-500',
     embedPrefix: 'https://www.youtube-nocookie.com/embed/'
   },
   reel: {
-    label: '🔥 Reel',
+    label: '🔥 Reel Animation',
     badgeBg: isDark => isDark ? 'bg-rose-500/15 border-rose-500/20 text-rose-300' : 'bg-rose-50 border-rose-100 text-rose-700',
     accentColor: 'text-rose-500',
     embedPrefix: 'https://www.youtube-nocookie.com/embed/'
   },
   article: {
-    label: '📖 Article',
+    label: '📖 Deep Dive Article',
     badgeBg: isDark => isDark ? 'bg-indigo-500/15 border-indigo-500/20 text-indigo-300' : 'bg-indigo-50 border-indigo-100 text-indigo-700',
     accentColor: 'text-indigo-500',
     embedPrefix: null
@@ -139,7 +140,7 @@ export default function AgenticOnboardingFlow({ isDarkMode = false }) {
     {
       id: 1,
       role: 'ai',
-      text: "Welcome back! I'm your Synapse AI Growth Architect. What is your **primary goal right now**, and how are you feeling today?\n\nTell me your goal and I'll curate 4 pieces of content — a Video, Short, Reel, and Article — tailored exactly for you. 🎯"
+      text: "Welcome! I'm your Synapse AI Growth Architect.\n\nWhat do you want to **become**? (e.g. Senior AI Architect, Full Stack Developer, Quantum Engineer, Data Scientist...)\n\nTell me what role or goal you want to achieve and I will store it in your profile and generate 4 targeted media resources — a Video, Short, Reel, and Article — tailored for you. 🎯"
     }
   ]);
   const [input, setInput] = useState('');
@@ -149,10 +150,10 @@ export default function AgenticOnboardingFlow({ isDarkMode = false }) {
   const bottomRef = useRef(null);
 
   const CURATING_STEPS = [
-    'Analyzing your goal intent...',
-    'Scanning YouTube for high-signal videos...',
-    'Filtering noise & ranking by relevance...',
-    'Building your 4-item personalized feed...'
+    'Analyzing your target role & career intent...',
+    'Scanning YouTube & media repositories for high-signal content...',
+    'Filtering noise & ranking by skill relevance...',
+    'Generating your personalized multi-format media feed...'
   ];
 
   useEffect(() => {
@@ -182,6 +183,12 @@ export default function AgenticOnboardingFlow({ isDarkMode = false }) {
     setInput('');
     setUserGoal(goalText);
 
+    // Save aspiration to local storage & backend
+    localStorage.setItem('synapse_user_aspiration', goalText);
+    localStorage.setItem('aspiration', goalText);
+    localStorage.setItem('synapse_onboarding_completed', 'true');
+    localStorage.removeItem('synapse_new_login_prompt');
+
     // Append user message
     const userMsg = { id: Date.now(), role: 'user', text: goalText };
     setMessages(prev => [...prev, userMsg]);
@@ -190,7 +197,7 @@ export default function AgenticOnboardingFlow({ isDarkMode = false }) {
     const aiReply = {
       id: Date.now() + 1,
       role: 'ai',
-      text: `Great! I'm analyzing your goal: **"${goalText}"** and curating 4 targeted resources — a Video, Short, Reel, and Article — just for you. Give me a moment...`
+      text: `Understood! Storing your goal: **"${goalText}"** and generating 4 targeted media resources — a Video, Short, Reel, and Article — to help you become a ${goalText.replace(/I want to become a/i, '').trim()}. Stand by...`
     };
     setMessages(prev => [...prev, aiReply]);
 
@@ -198,7 +205,8 @@ export default function AgenticOnboardingFlow({ isDarkMode = false }) {
     setStep('curating');
     setCuratingStep(0);
 
-    // Save to Supabase
+    // Save to Backend API & Supabase
+    saveAspirationToBackend(goalText);
     saveUserAspirationToSupabase({
       primary_goal: goalText,
       current_mood: 'focused',
@@ -221,16 +229,16 @@ export default function AgenticOnboardingFlow({ isDarkMode = false }) {
     setMessages([{
       id: 1,
       role: 'ai',
-      text: "Welcome back! What is your **primary goal right now**, and how are you feeling today? Tell me and I'll curate 4 pieces of content — a Video, Short, Reel, and Article — tailored exactly for you. 🎯"
+      text: "Welcome! What do you want to **become**? Tell me your dream role or goal and I will store it and generate 4 targeted media resources tailored exactly for you. 🎯"
     }]);
   };
 
   const chips = [
-    'I want to master React Hooks',
-    'I want to learn Machine Learning',
-    'I want to study System Design',
-    'I want to improve my health & sleep',
-    'I want to build deep work habits'
+    'I want to become a Senior AI Architect',
+    'I want to become a Full Stack Web Developer',
+    'I want to become a Machine Learning Engineer',
+    'I want to become a System Design Specialist',
+    'I want to become a Quantum Computing Researcher'
   ];
 
   return (
