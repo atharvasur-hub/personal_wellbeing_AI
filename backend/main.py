@@ -205,6 +205,10 @@ class PointsAwardRequest(BaseModel):
     points: int
     metadata: Optional[Dict[str, Any]] = None
 
+class FailedConceptRequest(BaseModel):
+    user_id: str
+    concept: str
+
 class ChatRequest(BaseModel):
     message: str
     history: List[Dict[str, Any]] = []
@@ -2014,9 +2018,6 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 async def award_points(req: PointsAwardRequest):
     print(f"--- [FastAPI Gamification] Received payload: {req.model_dump()} ---")
     
-    # HARDCODE DEBUG USER ID
-    req.user_id = 'test-user-1'
-    
     # Enforce points logic on backend
     points_to_award = req.points
     if req.action_type == "video_watched":
@@ -2119,6 +2120,13 @@ class CommunityMessageRequest(BaseModel):
     sender_name: str
     text: str
     role: Optional[str] = "user"
+
+
+@app.post("/api/concepts/fail")
+async def report_failed_concept(req: FailedConceptRequest):
+    """Record a concept the user is struggling with to improve ML recommendations."""
+    _add_failed_concept(req.user_id, req.concept)
+    return {"status": "success", "failed_concepts": _get_failed_concepts(req.user_id)}
 
 
 @app.get("/")
