@@ -1,13 +1,12 @@
 /**
  * AI-Powered Content Recommender
- * Uses Google Gemini API to generate 4 real, goal-matched content recommendations
- * (1 Video, 1 Short, 1 Reel, 1 Article) based on user's stated goal.
- *
- * TO ENABLE LIVE AI RECOMMENDATIONS:
- *   Open .env → set VITE_GEMINI_API_KEY=your_key_here
- *   Get a free key at: https://aistudio.google.com/app/apikey
+ * Priority chain:
+ *   1. FastAPI backend (localhost:8000/api/recommend)  ← PRIMARY
+ *   2. Direct Gemini API (browser)                     ← FALLBACK
+ *   3. Keyword-based static curations                  ← OFFLINE
  */
 import { GoogleGenAI } from '@google/genai';
+import { recommendContent } from './backendApi';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 const isKeyConfigured =
@@ -16,6 +15,7 @@ const isKeyConfigured =
   GEMINI_API_KEY.length > 10;
 
 const ai = isKeyConfigured ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
+
 
 // -----------------------------------------------------------------
 // HELPER: Curate 4 static recommendations for a given goal keyword
@@ -210,10 +210,33 @@ function getStaticRecommendations(goalText = '') {
 
 // -----------------------------------------------------------------
 // MAIN EXPORT: Fetch 4 AI-curated recommendations for a user goal
+// Priority: FastAPI backend → Direct Gemini → Static fallback
 // -----------------------------------------------------------------
-export async function fetchAIRecommendations(goalText) {
-  // Try Gemini API first if key is configured
+export async function fetchAIRecommendations(goalText, userId = null) {
+
+  // ── 1. TRY FASTAPI BACKEND (localhost:8000/api/recommend) ──
+  try {
+    const backendResult = await recommendContent(goalText, 'focused', userId);
+    if (backendResult?.items && backendResult.items.length >= 4) {
+      console.log('[ContentRecommender] ✅ Using FastAPI backend recommendations');
+      // Normalize snake_case backend fields to camelCase for frontend cards
+      return backendResult.items.map(item => ({
+        type: item.type,
+        title: item.title,
+        youtubeId: item.youtube_id || '',
+        url: item.url,
+        duration: item.duration,
+        reason: item.reason,
+        signalScore: item.signal_score || 95
+      }));
+    }
+  } catch {
+    // Backend offline — proceed to direct Gemini
+  }
+
+  // ── 2. DIRECT GEMINI API (browser-side) ──────────────────
   if (ai) {
+
     try {
       const prompt = `
 You are an expert learning curator AI. A user has stated the following goal:

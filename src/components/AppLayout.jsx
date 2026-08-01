@@ -46,6 +46,7 @@ import {
   supabase
 } from '../lib/supabaseClient';
 import { generateAIResponse } from '../lib/aiService';
+import { checkBackendHealth } from '../lib/backendApi';
 
 export default function AppLayout({ currentUser, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
@@ -55,6 +56,14 @@ export default function AppLayout({ currentUser, onLogout }) {
   const [showAIChatInterface, setShowAIChatInterface] = useState(false);
   const [showHabitModal, setShowHabitModal] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [backendOnline, setBackendOnline] = useState(false);
+
+  // Poll FastAPI backend health every 10 seconds
+  useEffect(() => {
+    checkBackendHealth().then(setBackendOnline);
+    const interval = setInterval(() => checkBackendHealth().then(setBackendOnline), 10000);
+    return () => clearInterval(interval);
+  }, []);
   
   // Dynamic user data from Auth
   const userName = currentUser?.name || 'Atharva Sur';
@@ -377,7 +386,16 @@ export default function AppLayout({ currentUser, onLogout }) {
                 : 'bg-stone-500/10 border-stone-500/20 text-stone-400'
             }`}>
               <Database className="w-3 h-3" />
-              <span>{supabase ? 'SUPABASE POSTGRES: CONNECTED' : 'SUPABASE: DEMO MODE'}</span>
+              <span>{supabase ? 'SUPABASE: CONNECTED' : 'SUPABASE: DEMO'}</span>
+            </div>
+
+            <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-mono font-bold ${
+              backendOnline
+                ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600'
+                : 'bg-stone-500/10 border-stone-500/20 text-stone-400'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${backendOnline ? 'bg-indigo-500 animate-pulse' : 'bg-stone-400'}`} />
+              <span>{backendOnline ? 'FASTAPI: LIVE' : 'FASTAPI: OFFLINE'}</span>
             </div>
           </div>
 
