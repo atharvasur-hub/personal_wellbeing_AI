@@ -725,7 +725,7 @@ export default function AppLayout({ currentUser, onLogout }) {
 
             {/* FULL PROFILE & VPM DASHBOARD VIEW */}
             {activeMenu === 'profile' && (
-              <ProfileVpmDashboard isDarkMode={isDarkMode} />
+              <ProfileVpmDashboard isDarkMode={isDarkMode} currentUser={currentUser} />
             )}
 
             {/* Other Sections Placeholder */}
