@@ -144,6 +144,11 @@ app.add_middleware(
 # PYDANTIC SCHEMAS
 # ═══════════════════════════════════════════════════════════════
 
+class PointsAwardRequest(BaseModel):
+    user_id: str
+    action_type: str
+    points: int
+
 class ChatRequest(BaseModel):
     message: str
     history: List[Dict[str, Any]] = []
@@ -1444,6 +1449,64 @@ def _build_suggestions(prompt: str) -> List[str]:
     if any(k in p for k in ["tired", "sleep", "energy", "burnout"]):
         return ["View sleep protocol", "Log energy baseline", "Start recovery sprint"]
     return ["Analyse my aspiration gap", "Generate a focus sprint", "Curate 4 resources"]
+
+
+@app.post("/api/points/award")
+async def award_points(req: PointsAwardRequest):
+    if not supabase_client:
+        return {"status": "success", "message": "Logged to in-memory fallback", "points": req.points}
+    
+    try:
+        # 1. Log the interaction
+        supabase_client.table("points_log").insert({
+            "user_id": req.user_id,
+            "action_type": req.action_type,
+            "points_awarded": req.points
+        }).execute()
+        
+        # 2. Update total points
+        res = supabase_client.table("user_points").select("total_points").eq("user_id", req.user_id).execute()
+        if res.data and len(res.data) > 0:
+            new_points = res.data[0]["total_points"] + req.points
+            supabase_client.table("user_points").update({"total_points": new_points}).eq("user_id", req.user_id).execute()
+        else:
+            new_points = req.points
+            # Extract name from email if available or default to "User"
+            supabase_client.table("user_points").insert({
+                "user_id": req.user_id, 
+                "total_points": new_points,
+                "name": "User"
+            }).execute()
+            
+        return {"status": "success", "total_points": new_points}
+    except Exception as e:
+        print(f"[FastAPI] Points award error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/points/balance")
+async def get_points_balance(user_id: str = "usr_default"):
+    if not supabase_client:
+        return {"total_points": 0}
+    try:
+        res = supabase_client.table("user_points").select("total_points").eq("user_id", user_id).execute()
+        if res.data and len(res.data) > 0:
+            return {"total_points": res.data[0]["total_points"]}
+        return {"total_points": 0}
+    except Exception as e:
+        print(f"[FastAPI] Balance fetch error: {e}")
+        return {"total_points": 0}
+
+@app.get("/api/leaderboard")
+async def get_leaderboard():
+    if not supabase_client:
+        return {"leaderboard": [{"name": "Mock User", "total_points": 100}]}
+    
+    try:
+        res = supabase_client.table("user_points").select("*").order("total_points", desc=True).limit(10).execute()
+        return {"leaderboard": res.data if res.data else []}
+    except Exception as e:
+        print(f"[FastAPI] Leaderboard fetch error: {e}")
+        return {"leaderboard": []}
 
 
 @app.get("/")

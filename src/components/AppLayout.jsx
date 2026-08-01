@@ -34,6 +34,8 @@ import VerifiedSkillsActiveRecall from './VerifiedSkillsActiveRecall';
 import NewUserGoalAssessmentModal from './NewUserGoalAssessmentModal';
 import UserJourneyTimeline from './UserJourneyTimeline';
 import ProfileVpmDashboard from './ProfileVpmDashboard';
+import Leaderboard from './Leaderboard';
+import PointsBadge from './PointsBadge';
 import {
   fetchChatHistoryFromSupabase,
   saveChatMessageToSupabase,
@@ -397,6 +399,7 @@ export default function AppLayout({ currentUser, onLogout }) {
     { id: 'focus', label: 'Focus Room', icon: Clock },
     { id: 'skills', label: 'Verified Skills', icon: Brain },
     { id: 'journey', label: 'Journey Map', icon: Compass },
+    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
     { id: 'profile', label: 'Profile', icon: User }
   ];
 
@@ -479,6 +482,8 @@ export default function AppLayout({ currentUser, onLogout }) {
             })}
           </nav>
         </div>
+
+        {!sidebarCollapsed && <PointsBadge isDarkMode={isDarkMode} />}
 
         {/* User Profile Capsule & Logout */}
         <div className={`p-3 rounded-2xl border shadow-sm flex items-center justify-between transition-opacity duration-300 ${isDarkMode
@@ -861,18 +866,13 @@ export default function AppLayout({ currentUser, onLogout }) {
             )}
 
             {/* VERIFIED SKILLS & ACTIVE RECALL VIEW */}
-            {activeMenu === 'skills' && (
-              <VerifiedSkillsActiveRecall isDarkMode={isDarkMode} currentUser={currentUser} />
-            )}
+            {activeMenu === 'skills' && <VerifiedSkillsActiveRecall currentUser={currentUser} isDarkMode={isDarkMode} />}
+            {activeMenu === 'journey' && <UserJourneyTimeline currentUser={currentUser} isDarkMode={isDarkMode} />}
+            {activeMenu === 'leaderboard' && <Leaderboard isDarkMode={isDarkMode} />}
 
             {/* FULL PROFILE & VPM DASHBOARD VIEW */}
             {activeMenu === 'profile' && (
               <ProfileVpmDashboard isDarkMode={isDarkMode} currentUser={currentUser} />
-            )}
-
-            {/* Journey Map Section */}
-            {activeMenu === 'journey' && (
-              <UserJourneyTimeline isDarkMode={isDarkMode} />
             )}
 
           </div>
