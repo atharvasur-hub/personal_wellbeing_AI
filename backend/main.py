@@ -253,6 +253,19 @@ class DeepSkillQuizSubmitRequest(BaseModel):
     selected_option: int
     correct_option: int
 
+class RoadmapRequest(BaseModel):
+    aspiration: str
+    user_id: Optional[str] = "usr_default"
+
+class RoadmapNodeItem(BaseModel):
+    id: str
+    title: str
+    subtitle: str
+    type: str
+    duration_mins: int
+    status: str
+    description: str
+
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -547,6 +560,89 @@ def _static_recommendations(goal: str, failed_concepts: List[str] = []) -> List[
             is_gap_fix=is_gap
         ),
     ]
+
+
+@app.post("/api/roadmap")
+async def generate_roadmap(req: RoadmapRequest):
+    """Generate a dynamic 5-node skill roadmap for a target career aspiration."""
+    aspiration = req.aspiration or "AI Engineer"
+
+    prompt = f"""
+You are an expert AI Career Architect. Create a structured 5-milestone learning roadmap to help someone achieve this goal/role: "{aspiration}".
+
+Return ONLY a valid JSON array of 5 objects. No markdown formatting.
+Each object:
+- "id": string e.g. "node-1", "node-2", "node-3", "node-4", "node-5"
+- "title": milestone title (max 8 words)
+- "subtitle": phase subtitle e.g. "Phase 1 • Foundational Skills"
+- "type": content/activity type e.g. "Video Tutorial", "Focus Sprint", "Interactive AI Feed", "Deep Dive Article", "Performance Audit"
+- "duration_mins": integer e.g. 15, 25, 10, 45, 20
+- "status": string ("completed" for node 1-2, "active" for node 3, "locked" for node 4-5)
+- "description": 1 concise sentence describing what the user learns or achieves at this stage.
+
+Return ONLY the JSON array.
+""".strip()
+
+    raw_text = _generate_gemini(prompt)
+    if raw_text:
+        try:
+            raw = raw_text.replace("```json", "").replace("```", "").strip()
+            parsed = json.loads(raw)
+            if len(parsed) >= 5:
+                return {"aspiration": aspiration, "nodes": parsed[:5]}
+        except Exception:
+            pass
+
+    # Static fallback roadmap generator
+    role_clean = aspiration.replace("I want to become a", "").replace("I want to be a", "").strip().title()
+    fallback_nodes = [
+        {
+            "id": "node-1",
+            "title": f"Foundational {role_clean} Fundamentals",
+            "subtitle": "Phase 1 • Orientation",
+            "type": "Video Tutorial",
+            "duration_mins": 15,
+            "status": "completed",
+            "description": f"Master basic mental models and prerequisites for becoming a {role_clean}."
+        },
+        {
+            "id": "node-2",
+            "title": f"Core {role_clean} Tooling & Practice",
+            "subtitle": "Phase 2 • Hands-on Sprint",
+            "type": "Focus Sprint",
+            "duration_mins": 25,
+            "status": "completed",
+            "description": f"Build hands-on practice projects with key framework tools."
+        },
+        {
+            "id": "node-3",
+            "title": f"Advanced {role_clean} System Integration",
+            "subtitle": "Phase 3 • Active Journey Node",
+            "type": "Interactive AI Feed",
+            "duration_mins": 10,
+            "status": "active",
+            "description": f"Integrate complex components and consume curated AI media feed."
+        },
+        {
+            "id": "node-4",
+            "title": f"Production Scaling & Edge-Case Architecture",
+            "subtitle": "Phase 4 • Locked Skill Matrix",
+            "type": "Deep Dive Article",
+            "duration_mins": 45,
+            "status": "locked",
+            "description": f"Optimize system performance, security benchmarks, and reliability."
+        },
+        {
+            "id": "node-5",
+            "title": f"Senior {role_clean} Portfolio Audit",
+            "subtitle": "Phase 5 • Final Calibration",
+            "type": "Performance Audit",
+            "duration_mins": 20,
+            "status": "locked",
+            "description": f"Verify 10/10 node mastery and benchmark Value Per Minute index."
+        }
+    ]
+    return {"aspiration": aspiration, "nodes": fallback_nodes}
 
 
 # ═══════════════════════════════════════════════════════════════
