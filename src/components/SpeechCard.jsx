@@ -1,7 +1,9 @@
-import React from 'react';
-import { Mic, Quote } from 'lucide-react';
+import React, { useState } from 'react';
+import { Mic, Quote, CheckCircle2 } from 'lucide-react';
+import { awardPoints } from '../lib/backendApi';
 
 export default function SpeechCard({ item, isDarkMode }) {
+  const [completed, setCompleted] = useState(false);
   const isGap = item.isGapFix || item.is_gap_fix;
   const cardStyles = isGap
     ? (isDarkMode 
@@ -34,10 +36,34 @@ export default function SpeechCard({ item, isDarkMode }) {
           </h3>
         </div>
 
-        <div className="mt-auto pt-2">
+        <div className="mt-auto pt-2 flex flex-col gap-3">
           <p className={`text-xs leading-relaxed line-clamp-2 ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
             {item.reason}
           </p>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              if (completed) return;
+              setCompleted(true);
+              awardPoints('usr_default', 'speech_read', 5).then(() => {
+                window.dispatchEvent(new CustomEvent('pointsAwarded', { detail: { points: 5 } }));
+              }).catch(console.error);
+            }}
+            className={`flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs font-bold transition-all ${
+              completed 
+                ? (isDarkMode ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-700')
+                : (isDarkMode ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' : 'bg-stone-200 text-stone-600 hover:bg-stone-300')
+            }`}
+          >
+            {completed ? (
+              <>
+                <CheckCircle2 className="w-4 h-4" />
+                Completed (+5 pts)
+              </>
+            ) : (
+              'Mark as Complete'
+            )}
+          </button>
         </div>
       </div>
     </div>
