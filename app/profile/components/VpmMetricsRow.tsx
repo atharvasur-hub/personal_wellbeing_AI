@@ -24,8 +24,8 @@ export default function VpmMetricsRow({
   goalVelocity,
   vpmIndex
 }: VpmMetricsRowProps) {
-  // Priority: Prop -> localStorage -> Default Fallback
-  const displayFocusTime = focusTime || localStorage.getItem('synapse_profile_focus_time') || '2h 15m';
+  // Priority: Prop -> localStorage -> Default Fallback (0h 0m until user spends time in Focus Room)
+  const displayFocusTime = focusTime || localStorage.getItem('synapse_profile_focus_time') || '0h 0m';
   const displaySkills = skillsVerified || localStorage.getItem('synapse_profile_skills_verified') || '12 Concepts';
   const displayVelocity = goalVelocity || localStorage.getItem('synapse_profile_goal_velocity') || '84%';
   const displayVpm = vpmIndex || localStorage.getItem('synapse_profile_vpm_index') || '$4.82/min';
