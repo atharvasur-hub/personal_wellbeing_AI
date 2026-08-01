@@ -158,9 +158,15 @@ export default function FocusRoom({ isDarkMode = false, currentUser }) {
       });
       
       // Award Gamification Points (50 pts for focus session)
-      awardPoints('usr_default', 'focus_mode_complete', 50).then(() => {
-        window.dispatchEvent(new CustomEvent('pointsAwarded', { detail: { points: 50 } }));
-      }).catch(console.error);
+      console.log("[FocusRoom] Dispatching awardPoints payload: { action_type: 'focus_mode_complete', points: 50 }");
+      awardPoints('usr_default', 'focus_mode_complete', 50).then((res) => {
+        console.log("[FocusRoom] awardPoints response:", res);
+        if (res && res.status === 'success') {
+          window.dispatchEvent(new CustomEvent('pointsAwarded', { detail: { points: 50 } }));
+        }
+      }).catch((err) => {
+        console.error("[FocusRoom] awardPoints error:", err);
+      });
     }
     return () => clearInterval(interval);
   }, [isActive, isPaused, secondsLeft, totalSeconds, focusTask, currentUser]);

@@ -258,11 +258,12 @@ export async function saveUserProfileToBackend(profileData) {
 
 
 // ── PILLAR 10: Gamified Points System & Leaderboard ───────────
-export async function awardPoints(userId = 'usr_default', actionType, points) {
-  return apiFetch('/api/points/award', {
+export async function awardPoints(userId = 'usr_default', actionType, points, metadata = null) {
+  return await apiFetch('/api/points/award', {
     user_id: userId,
     action_type: actionType,
-    points: points
+    points: points,
+    metadata: metadata
   });
 }
 

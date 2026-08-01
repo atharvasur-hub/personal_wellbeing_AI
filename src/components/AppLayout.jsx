@@ -45,7 +45,7 @@ import {
   supabase
 } from '../lib/supabaseClient';
 import { generateAIResponse } from '../lib/aiService';
-import { checkBackendHealth, getUserProfileFromBackend } from '../lib/backendApi';
+import { checkBackendHealth, getUserProfileFromBackend, awardPoints } from '../lib/backendApi';
 
 const renderFormattedOverlayMessage = (text) => {
   if (!text) return null;
@@ -124,7 +124,7 @@ const renderFormattedOverlayMessage = (text) => {
 };
 
 export default function AppLayout({ currentUser, onLogout }) {
-  const [activeMenu, setActiveMenu] = useState('dashboard');
+  const [activeMenu, setActiveMenu] = useState('profile');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showReflection, setShowReflection] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -387,12 +387,12 @@ export default function AppLayout({ currentUser, onLogout }) {
     ));
   };
   const menuItems = [
+    { id: 'profile', label: 'Profile', icon: User },
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'focus', label: 'Focus Room', icon: Clock },
     { id: 'community', label: 'Community Hub', icon: Users },
     { id: 'journey', label: 'Journey Map', icon: Compass },
-    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
-    { id: 'profile', label: 'Profile', icon: User }
+    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy }
   ];
 
   return (
@@ -467,7 +467,7 @@ export default function AppLayout({ currentUser, onLogout }) {
           </nav>
         </div>
 
-        {!sidebarCollapsed && <PointsBadge isDarkMode={isDarkMode} />}
+        {/* Points Component removed from here and relocated to the top header */}
 
         {/* User Profile Capsule & Logout */}
         <div className={`p-3 rounded-2xl border shadow-sm flex items-center justify-between transition-opacity duration-300 ${isDarkMode
@@ -574,6 +574,9 @@ export default function AppLayout({ currentUser, onLogout }) {
                 <span className="hidden md:inline">Log Out</span>
               </button>
             )}
+
+            {/* Relocated Points Badge */}
+            <PointsBadge isDarkMode={isDarkMode} />
 
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}

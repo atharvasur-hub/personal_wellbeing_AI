@@ -21,6 +21,7 @@ import sqlite3
 import json
 import time
 import urllib.request
+import traceback
 from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, HTTPException, Depends, status
@@ -205,6 +206,11 @@ class PointsAwardRequest(BaseModel):
     user_id: str
     action_type: str
     points: int
+    metadata: Optional[Dict[str, Any]] = None
+
+class FailedConceptRequest(BaseModel):
+    user_id: str
+    concept: str
 
 class ChatRequest(BaseModel):
     message: str
@@ -243,6 +249,17 @@ class HabitCheckRequest(BaseModel):
     activity: str
     duration_minutes: int
     user_id: Optional[str] = "usr_default"
+
+class HabitSteeringRequest(BaseModel):
+    aspiration: str
+    fatigue_level: str
+    previous_fail_context: str
+    user_id: str = "usr_default"
+
+class UserSignup(BaseModel):
+    name: str
+    email: str
+    password: str
 
 class HabitCheckResponse(BaseModel):
     intercept_required: bool
@@ -510,9 +527,18 @@ async def recommend(req: GoalRequest):
     intent = _analyze_intent(req.goal)
     user_id = req.user_id or "usr_default"
     failed_concepts = _get_failed_concepts(user_id)
+    
+    recent_interests = []
+    if supabase_client:
+        try:
+            res = supabase_client.table("user_video_interests").select("video_title").eq("user_id", user_id).order("created_at", desc=True).limit(5).execute()
+            if res.data:
+                recent_interests = [r["video_title"] for r in res.data]
+        except Exception as e:
+            print(f"[FastAPI] Error fetching user_video_interests: {e}")
 
     try:
-        items = await _gemini_recommendations(req.goal, failed_concepts)
+        items = await _gemini_recommendations(req.goal, failed_concepts, recent_interests)
         if items:
             return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
     except Exception as e:
@@ -523,15 +549,21 @@ async def recommend(req: GoalRequest):
     return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
 
 
-async def _gemini_recommendations(goal: str, failed_concepts: List[str] = []) -> List[ContentItem]:
+async def _gemini_recommendations(goal: str, failed_concepts: List[str] = [], recent_interests: List[str] = []) -> List[ContentItem]:
     gap_instruction = ""
     if failed_concepts:
         concepts_str = ", ".join(failed_concepts)
         gap_instruction = f'\nYou are an adaptive learning curator. The user recently struggled with the following concepts: {concepts_str}. You MUST prioritize and generate content cards specifically targeting these exact blind spots before recommending any general content. Tag the returned JSON object with `is_gap_fix: true`.'
+        
+    interest_instruction = ""
+    if recent_interests:
+        interests_str = ", ".join(recent_interests)
+        interest_instruction = f'\nThe user recently watched and completed these topics: {interests_str}. You MUST generate NEW, highly relevant recommendations that build on these specific topics to maintain their interest.'
 
     prompt = f"""
 You are an expert learning curator AI. A user has stated this goal: "{goal}"
 {gap_instruction}
+{interest_instruction}
 
 Return ONLY a valid JSON array with exactly 4 objects. No markdown, no extra text. Each object:
 - "type": one of "video", "podcast", "speech", "article"
@@ -1618,6 +1650,25 @@ def _classify_community(aspiration: str) -> dict:
         }
 
 def _get_community_messages(community_id: str) -> List[Dict[str, Any]]:
+    # 1. Try Supabase first for global sync
+    if supabase_client:
+        try:
+            res = supabase_client.table("community_messages").select("*").eq("community_id", community_id).order("created_at").execute()
+            if res.data is not None:
+                return [{
+                    "id": str(r.get("id")),
+                    "community_id": r.get("community_id"),
+                    "sender_id": r.get("sender_id"),
+                    "sender_name": r.get("sender_name"),
+                    "role": r.get("role"),
+                    "text": r.get("text"),
+                    "is_announcement": bool(r.get("is_announcement")),
+                    "created_at": r.get("created_at")
+                } for r in res.data]
+        except Exception as e:
+            print(f"[FastAPI] Supabase community fetch error: {e}")
+
+    # 2. Fallback to local SQLite
     try:
         conn = sqlite3.connect("users.db")
         conn.row_factory = sqlite3.Row
@@ -1648,6 +1699,29 @@ def _get_community_messages(community_id: str) -> List[Dict[str, Any]]:
 
 def _record_community_message(community_id: str, sender_id: str, sender_name: str, role: str, text: str, is_announcement: bool = False):
     created_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    
+    msg_obj = {
+        "community_id": community_id,
+        "sender_id": sender_id,
+        "sender_name": sender_name,
+        "role": role,
+        "text": text,
+        "is_announcement": is_announcement,
+        "created_at": created_at
+    }
+    
+    # 1. Try Supabase first
+    if supabase_client:
+        try:
+            res = supabase_client.table("community_messages").insert(msg_obj).execute()
+            if res.data and len(res.data) > 0:
+                ret = msg_obj.copy()
+                ret["id"] = str(res.data[0].get("id"))
+                return ret
+        except Exception as e:
+            print(f"[FastAPI] Supabase community insert error: {e}")
+
+    # 2. Fallback to local SQLite
     try:
         conn = sqlite3.connect("users.db")
         cursor = conn.cursor()
@@ -1663,18 +1737,10 @@ def _record_community_message(community_id: str, sender_id: str, sender_name: st
     if "community_messages" not in in_memory_db:
         in_memory_db["community_messages"] = []
     
-    msg_obj = {
-        "id": int(time.time() * 1000),
-        "community_id": community_id,
-        "sender_id": sender_id,
-        "sender_name": sender_name,
-        "role": role,
-        "text": text,
-        "is_announcement": is_announcement,
-        "created_at": created_at
-    }
-    in_memory_db["community_messages"].append(msg_obj)
-    return msg_obj
+    ret_obj = msg_obj.copy()
+    ret_obj["id"] = int(time.time() * 1000)
+    in_memory_db["community_messages"].append(ret_obj)
+    return ret_obj
 
 def seed_community_messages(community_id: str):
     existing = _get_community_messages(community_id)
@@ -1723,14 +1789,66 @@ def seed_community_messages(community_id: str):
 
 @app.get("/api/community/group")
 async def get_community_group(user_id: str = "usr_default"):
-    profile = in_memory_db["user_profiles"].get(user_id)
-    aspiration = ""
-    if profile:
-        aspiration = profile.get("aspiration") or ""
-    else:
-        if user_id == "usr_default":
-            aspiration = "Senior AI Architect"
-    return _classify_community(aspiration)
+    # 1. Gather all user names
+    user_names = {u["id"]: u.get("name", "User") for u in in_memory_db.get("users", [])}
+    
+    # 2. Gather all aspirations
+    all_user_asps = {}
+    for uid, prof in in_memory_db.get("user_profiles", {}).items():
+        if prof.get("aspiration"):
+            all_user_asps[uid] = prof.get("aspiration")
+            if prof.get("name"):
+                user_names[uid] = prof.get("name")
+                
+    for asp_obj in in_memory_db.get("user_aspirations", []):
+        uid = asp_obj.get("user_id")
+        if uid and asp_obj.get("aspiration"):
+            all_user_asps[uid] = asp_obj.get("aspiration")
+            
+    # Include all users even with no aspiration
+    for uid in user_names:
+        if uid not in all_user_asps:
+            all_user_asps[uid] = ""
+
+    # Fetch from Supabase if available
+    if supabase_client:
+        try:
+            res_asp = supabase_client.table("user_aspirations").select("user_id, aspiration").execute()
+            if res_asp.data:
+                for row in res_asp.data:
+                    if row.get("aspiration"):
+                        all_user_asps[row["user_id"]] = row["aspiration"]
+                        
+            res_prof = supabase_client.table("profiles").select("user_id, display_name").execute()
+            if res_prof.data:
+                for row in res_prof.data:
+                    user_names[row["user_id"]] = row.get("display_name") or "User"
+        except Exception:
+            pass
+
+    # 3. Determine current user's aspiration
+    aspiration = all_user_asps.get(user_id, "")
+    if not aspiration and user_id == "usr_default":
+        aspiration = "Senior AI Architect"
+        
+    cdata = _classify_community(aspiration)
+    
+    # 4. Find all matching members
+    real_members = []
+    for uid, u_asp in all_user_asps.items():
+        if uid == user_id:
+            continue
+        u_cdata = _classify_community(u_asp)
+        if u_cdata["id"] == cdata["id"]:
+            name = user_names.get(uid) or f"User {uid[-4:]}" if uid else "Unknown"
+            real_members.append({
+                "name": name,
+                "title": u_asp if u_asp else "Member",
+                "status": "online"
+            })
+            
+    cdata["members"] = real_members
+    return cdata
 
 @app.get("/api/community/messages")
 async def get_community_messages(community_id: str):
@@ -1743,21 +1861,25 @@ async def post_community_message(req: CommunityMessageRequest):
     msg = _record_community_message(
         req.community_id, req.sender_id, req.sender_name, req.role or "user", req.text, is_announcement=False
     )
+    ai_reply_msg = None
     if req.role == "user":
-        agent_info = None
-        for cid in ["ai-ml", "full-stack", "growth"]:
-            cdata = _classify_community(cid if cid == req.community_id else "other")
-            if cdata["id"] == req.community_id:
-                agent_info = cdata
-                break
+        agent_name = "AI Facilitator"
+        agent_prompt = "You are an expert AI Facilitator."
         
-        if agent_info:
-            agent_name = agent_info["agent_name"]
-            agent_prompt = agent_info["agent_prompt"]
-            recent_msgs = _get_community_messages(req.community_id)[-8:]
-            thread_context = "\n".join([f"{m['sender_name']}: {m['text']}" for m in recent_msgs])
-            
-            prompt = f"""
+        if req.community_id == "ai-ml":
+            agent_name = "Aether-AI Facilitator"
+            agent_prompt = "You are Aether-AI for AI/ML."
+        elif req.community_id == "full-stack":
+            agent_name = "Nexus-Dev Facilitator"
+            agent_prompt = "You are Nexus-Dev for Full Stack."
+        else:
+            agent_name = "Soma-Growth Facilitator"
+            agent_prompt = "You are Soma-Growth for Wellbeing."
+
+        recent_msgs = _get_community_messages(req.community_id)[-8:]
+        thread_context = "\n".join([f"{m['sender_name']}: {m['text']}" for m in recent_msgs])
+        
+        prompt = f"""
 {agent_prompt}
 
 You are in a community group chat. Here is the recent chat history:
@@ -1765,20 +1887,21 @@ You are in a community group chat. Here is the recent chat history:
 
 Provide a short, 1-2 sentence response addressed to the community or the last sender, offering technical insight, productivity feedback, or encouragement related to their discussion. Keep it concise, high-tech, and supportive. Do not use prefixes like "{agent_name}:". Just write the text.
 """
-            ai_reply = _generate_gemini(prompt)
-            if not ai_reply:
-                if req.community_id == "ai-ml":
-                    ai_reply = f"Acknowledged. We should keep an eye on model overfitting when adjusting weights. Have you validated your training data profile?"
-                elif req.community_id == "full-stack":
-                    ai_reply = f"Excellent point. Always remember to decouple database calls from UI paint lifecycles to avoid bottlenecking."
-                else:
-                    ai_reply = f"Well observed. Regular energy logging is critical to maintaining a high focus trajectory. Keep up the sprint alignment!"
-            
-            _record_community_message(
-                req.community_id, f"agent_{req.community_id}", agent_name, "assistant", ai_reply, is_announcement=False
-            )
-            
-    return {"status": "success", "message": msg}
+        ai_reply = _generate_gemini(prompt)
+        
+        if not ai_reply:
+            if req.community_id == "ai-ml":
+                ai_reply = "Acknowledged. We should keep an eye on model overfitting when adjusting weights. Have you validated your training data profile?"
+            elif req.community_id == "full-stack":
+                ai_reply = "Excellent point. Always remember to decouple database calls from UI paint lifecycles to avoid bottlenecking."
+            else:
+                ai_reply = "Well observed. Regular energy logging is critical to maintaining a high focus trajectory. Keep up the sprint alignment!"
+        
+        ai_reply_msg = _record_community_message(
+            req.community_id, f"agent_{req.community_id}", agent_name, "assistant", ai_reply, is_announcement=False
+        )
+        
+    return {"status": "success", "message": msg, "ai_reply": ai_reply_msg}
 
 @app.post("/api/community/trigger-announcement")
 async def trigger_community_announcement(req: TriggerAnnouncementRequest):
@@ -1901,10 +2024,22 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 @app.post("/api/points/award")
 async def award_points(req: PointsAwardRequest):
+    print(f"--- [FastAPI Gamification] Received payload: {req.model_dump()} ---")
+    
     # Enforce points logic on backend
     points_to_award = req.points
     if req.action_type == "video_watched":
         points_to_award = 10
+        if req.metadata and req.metadata.get("title") and supabase_client:
+            try:
+                supabase_client.table("user_video_interests").insert({
+                    "user_id": req.user_id,
+                    "video_title": req.metadata.get("title"),
+                    "video_type": req.metadata.get("contentType", "video")
+                }).execute()
+            except Exception as e:
+                print(f"[FastAPI] Error inserting video interest: {e}")
+
     elif req.action_type == "focus_mode_complete":
         points_to_award = 50
     elif req.action_type == "podcast_listened":
@@ -1916,31 +2051,46 @@ async def award_points(req: PointsAwardRequest):
         return {"status": "success", "message": "Logged to in-memory fallback", "points": points_to_award}
     
     try:
+        print(f"[FastAPI] Awarding {points_to_award} points to {req.user_id} for {req.action_type}")
         # 1. Log the interaction
-        supabase_client.table("points_log").insert({
+        log_res = supabase_client.table("points_log").insert({
             "user_id": req.user_id,
             "action_type": req.action_type,
             "points_awarded": points_to_award
         }).execute()
+        print(f"[FastAPI] points_log insert response: {log_res.data}")
         
-        # 2. Update total points
+        # 2. Update total points via UPSERT
         res = supabase_client.table("user_points").select("total_points").eq("user_id", req.user_id).execute()
+        print(f"[FastAPI] user_points select response: {res.data}")
+        
+        new_points = points_to_award
         if res.data and len(res.data) > 0:
-            new_points = res.data[0]["total_points"] + points_to_award
-            supabase_client.table("user_points").update({"total_points": new_points}).eq("user_id", req.user_id).execute()
-        else:
-            new_points = req.points
-            # Extract name from email if available or default to "User"
-            supabase_client.table("user_points").insert({
-                "user_id": req.user_id, 
-                "total_points": new_points,
-                "name": "User"
-            }).execute()
+            new_points += res.data[0].get("total_points", 0)
+            
+        upd_res = supabase_client.table("user_points").upsert({
+            "user_id": req.user_id, 
+            "total_points": new_points,
+            "name": "Test User"
+        }).execute()
+        print(f"[FastAPI] user_points upsert response: {upd_res.data}")
             
         return {"status": "success", "total_points": new_points}
     except Exception as e:
         print(f"[FastAPI] Points award error: {e}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/test-db")
+async def test_db():
+    if not supabase_client:
+        return {"status": "error", "message": "Supabase client not initialized"}
+    try:
+        res = supabase_client.table("user_points").select("*").limit(10).execute()
+        return {"status": "success", "data": res.data}
+    except Exception as e:
+        traceback.print_exc()
+        return {"status": "error", "error": str(e)}
 
 @app.get("/api/points/balance")
 async def get_points_balance(user_id: str = "usr_default"):
@@ -1980,172 +2130,11 @@ class CommunityMessageRequest(BaseModel):
     role: Optional[str] = "user"
 
 
-COMMUNITY_COHORTS = {
-    "ai-ml": {
-        "id": "ai-ml",
-        "name": "Synapse AI & Neural Systems Cohort",
-        "description": "Collaborative peer network for AI/ML engineering, system architecture, and cognitive optimization.",
-        "member_count": 142,
-        "agent_name": "Gemini-2.0-Flash",
-        "agent_avatar": "🤖",
-        "current_topic": "Optimizing LLM Inference Latency & RAG Vectors"
-    },
-    "full-stack": {
-        "id": "full-stack",
-        "name": "Full Stack & Cloud Architecture Cohort",
-        "description": "High-velocity developers building resilient REST microservices, React UI design systems, and distributed databases.",
-        "member_count": 98,
-        "agent_name": "FastAPI-Architect",
-        "agent_avatar": "⚡",
-        "current_topic": "Async Event Loops & Tailwind Glassmorphism UI"
-    },
-    "growth": {
-        "id": "growth",
-        "name": "High-Signal Growth & Deep Focus Cohort",
-        "description": "Productivity catalysts optimizing cognitive endurance, time-blocking, and Value Per Minute (VPM) metrics.",
-        "member_count": 115,
-        "agent_name": "VPM-Optimizer",
-        "agent_avatar": "🌿",
-        "current_topic": "Circadian Fatigue Reset & Box Breathing Sprints"
-    }
-}
-
-COMMUNITY_MESSAGES_STORE: Dict[str, List[dict]] = {
-    "ai-ml": [
-        {
-            "id": "msg-1",
-            "community_id": "ai-ml",
-            "sender_id": "agent-gemini",
-            "sender_name": "Gemini-2.0-Flash",
-            "text": "Welcome to the Synapse AI & Neural Systems Cohort! Share your current AI project or vector embedding pipeline.",
-            "role": "assistant",
-            "is_announcement": True,
-            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        },
-        {
-            "id": "msg-2",
-            "community_id": "ai-ml",
-            "sender_id": "usr_sophia",
-            "sender_name": "Sophia Chen",
-            "text": "Currently fine-tuning PyTorch transformer weights for low-memory deployment!",
-            "role": "user",
-            "is_announcement": False,
-            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        }
-    ],
-    "full-stack": [
-        {
-            "id": "msg-1",
-            "community_id": "full-stack",
-            "sender_id": "agent-fastapi",
-            "sender_name": "FastAPI-Architect",
-            "text": "Welcome Full Stack Builders! Let's discuss microservice scalability and React component hygiene.",
-            "role": "assistant",
-            "is_announcement": True,
-            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        }
-    ],
-    "growth": [
-        {
-            "id": "msg-1",
-            "community_id": "growth",
-            "sender_id": "agent-vpm",
-            "sender_name": "VPM-Optimizer",
-            "text": "Welcome to the Deep Focus Cohort! Remember to log your 25-minute sprints and monitor cognitive fatigue.",
-            "role": "assistant",
-            "is_announcement": True,
-            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        }
-    ]
-}
-
-
-@app.get("/api/community/group")
-async def get_community_group(user_id: Optional[str] = "usr_default"):
-    """Retrieve cohort allocation for user based on aspiration."""
-    profile = in_memory_db["user_profiles"].get(user_id)
-    asp = (profile.get("aspiration") if profile else "").lower()
-
-    if any(k in asp for k in ["react", "frontend", "web", "full stack", "python"]):
-        cohort_id = "full-stack"
-    elif any(k in asp for k in ["growth", "focus", "health", "productivity"]):
-        cohort_id = "growth"
-    else:
-        cohort_id = "ai-ml"
-
-    return COMMUNITY_COHORTS[cohort_id]
-
-
-@app.get("/api/community/messages")
-async def get_community_messages(community_id: Optional[str] = "ai-ml"):
-    """Retrieve chat history for a community group."""
-    msgs = COMMUNITY_MESSAGES_STORE.get(community_id, [])
-    return {"messages": msgs}
-
-
-@app.post("/api/community/messages")
-async def send_community_message(req: CommunityMessageRequest):
-    """Post a message to a community cohort."""
-    cid = req.community_id or "ai-ml"
-    if cid not in COMMUNITY_MESSAGES_STORE:
-        COMMUNITY_MESSAGES_STORE[cid] = []
-
-    msg_obj = {
-        "id": f"msg-{int(time.time()*1000)}",
-        "community_id": cid,
-        "sender_id": req.sender_id,
-        "sender_name": req.sender_name,
-        "text": req.text,
-        "role": req.role or "user",
-        "is_announcement": False,
-        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    }
-    COMMUNITY_MESSAGES_STORE[cid].append(msg_obj)
-
-    # AI Facilitator Response
-    if req.role == "user":
-        facilitator_name = COMMUNITY_COHORTS.get(cid, {}).get("agent_name", "AI Facilitator")
-        ai_reply = _generate_gemini(f"You are the community facilitator ({facilitator_name}) for cohort {cid}. A member named {req.sender_name} posted: '{req.text}'. Provide a 2-sentence encouraging technical response.")
-        if not ai_reply:
-            ai_reply = f"Great insight @{req.sender_name}! Keep pushing your {cid} skill velocity."
-
-        reply_obj = {
-            "id": f"msg-{int(time.time()*1000)+1}",
-            "community_id": cid,
-            "sender_id": "agent-facilitator",
-            "sender_name": facilitator_name,
-            "text": ai_reply,
-            "role": "assistant",
-            "is_announcement": False,
-            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        }
-        COMMUNITY_MESSAGES_STORE[cid].append(reply_obj)
-
-    return {"status": "success", "message": msg_obj}
-
-
-@app.post("/api/community/trigger-announcement")
-async def trigger_community_announcement(req: Dict[str, Any]):
-    cid = req.get("community_id", "ai-ml")
-    facilitator_name = COMMUNITY_COHORTS.get(cid, {}).get("agent_name", "AI Facilitator")
-
-    announcement_text = f"📢 **Cohort Milestone Alert:** Community members achieved 84% average skill velocity today! Keep up the focus sprints."
-
-    announcement_obj = {
-        "id": f"msg-{int(time.time()*1000)}",
-        "community_id": cid,
-        "sender_id": "agent-facilitator",
-        "sender_name": facilitator_name,
-        "text": announcement_text,
-        "role": "assistant",
-        "is_announcement": True,
-        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    }
-    if cid not in COMMUNITY_MESSAGES_STORE:
-        COMMUNITY_MESSAGES_STORE[cid] = []
-    COMMUNITY_MESSAGES_STORE[cid].append(announcement_obj)
-
-    return {"status": "success", "announcement": announcement_obj}
+@app.post("/api/concepts/fail")
+async def report_failed_concept(req: FailedConceptRequest):
+    """Record a concept the user is struggling with to improve ML recommendations."""
+    _add_failed_concept(req.user_id, req.concept)
+    return {"status": "success", "failed_concepts": _get_failed_concepts(req.user_id)}
 
 
 @app.get("/")
