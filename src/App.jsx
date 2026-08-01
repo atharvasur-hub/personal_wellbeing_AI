@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AuthPage from './components/AuthPage';
 import AppLayout from './components/AppLayout';
+import AspirationSetupScreen from './components/AspirationSetupScreen';
 import { getCurrentUser, signOutUser, subscribeToAuthState } from './lib/supabaseClient';
 
 const DEFAULT_USER = {
@@ -23,6 +24,21 @@ function App() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // Cache-busting: clear stale media cache entries with empty youtubeId OR old short/reel types
+    try {
+      const cached = JSON.parse(localStorage.getItem('synapse_curated_media') || '[]');
+      const hasStale = cached.some(i =>
+        (i.type !== 'article' && (!i.youtubeId || i.youtubeId.length === 0 || i.signalScore === 0)) ||
+        i.type === 'short' || i.type === 'reel'
+      );
+      if (hasStale) {
+        localStorage.removeItem('synapse_curated_media');
+        console.log('[Synapse] Cleared stale media cache (short/reel types removed).');
+      }
+    } catch {
+      localStorage.removeItem('synapse_curated_media');
+    }
+
     async function checkAuth() {
       const user = await getCurrentUser();
       if (user) {
@@ -42,15 +58,33 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // 'aspiration_setup' state: appears after login if no aspiration saved yet
+  const [showAspirationSetup, setShowAspirationSetup] = useState(false);
+
   const handleLoginSuccess = (userData) => {
     setCurrentUser(userData);
     localStorage.setItem('synapse_auth_user', JSON.stringify(userData));
+    // Show aspiration setup if user hasn't set one
+    const hasAspiration = localStorage.getItem('synapse_user_aspiration') || localStorage.getItem('aspiration');
+    if (!hasAspiration) {
+      setShowAspirationSetup(true);
+    }
+  };
+
+  const handleAspirationComplete = ({ aspiration }) => {
+    setShowAspirationSetup(false);
   };
 
   const handleLogout = async () => {
     await signOutUser();
     localStorage.removeItem('synapse_auth_user');
     localStorage.removeItem('synapse_current_user');
+    localStorage.removeItem('synapse_user_aspiration');
+    localStorage.removeItem('aspiration');
+    localStorage.removeItem('synapse_user_roadmap');
+    localStorage.removeItem('synapse_curated_media');
+    localStorage.removeItem('synapse_onboarding_completed');
+    setShowAspirationSetup(false);
     setCurrentUser(null);
   };
 
@@ -67,10 +101,12 @@ function App() {
 
   return (
     <>
-      {currentUser ? (
-        <AppLayout currentUser={currentUser} onLogout={handleLogout} />
-      ) : (
+      {!currentUser ? (
         <AuthPage onLoginSuccess={handleLoginSuccess} />
+      ) : showAspirationSetup ? (
+        <AspirationSetupScreen currentUser={currentUser} onComplete={handleAspirationComplete} />
+      ) : (
+        <AppLayout currentUser={currentUser} onLogout={handleLogout} />
       )}
     </>
   );

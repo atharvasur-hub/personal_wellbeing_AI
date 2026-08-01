@@ -336,7 +336,7 @@ def _record_chat_message(user_id: str, role: str, text: str, suggestions: List[s
 
 @app.post("/api/recommend", response_model=RecommendationResponse)
 async def recommend(req: GoalRequest):
-    """ML Content Curation — returns 4 items (Video, Short, Reel, Article) for a goal."""
+    """ML Content Curation — returns 4 items (3 Videos + 1 Article) for a goal."""
     intent = _analyze_intent(req.goal)
 
     try:
@@ -355,19 +355,20 @@ async def _gemini_recommendations(goal: str) -> List[ContentItem]:
 You are an expert learning curator AI. A user has stated this goal: "{goal}"
 
 Return ONLY a valid JSON array with exactly 4 objects. No markdown, no extra text. Each object:
-- "type": one of "video", "short", "reel", "article"
+- "type": either "video" or "article" ONLY
 - "title": descriptive title (max 10 words)
-- "youtube_id": REAL 11-char YouTube video ID (empty string "" for articles)
+- "youtube_id": REAL 11-char YouTube video ID (empty string "" for articles ONLY)
 - "url": full URL to the resource
-- "duration": e.g. "12 min" or "60 sec" or "8 min read"
+- "duration": e.g. "12 min" or "8 min read"
 - "reason": one sentence starting with "Why: " explaining relevance to the goal
 - "signal_score": integer 90-99
 
 Rules:
-1. Item 1 = type "video" (5-20 min full YouTube tutorial)
-2. Item 2 = type "short" (YouTube Short, under 60 sec)
-3. Item 3 = type "reel" (short-form video reel, under 60 sec)
-4. Item 4 = type "article" (high-quality article, youtube_id must be "")
+1. Item 1 = type "video" — foundational full tutorial (10-30 min)
+2. Item 2 = type "video" — practical hands-on project tutorial (10-20 min)
+3. Item 3 = type "video" — advanced concept or career tips (8-20 min)
+4. Item 4 = type "article" — high-quality written guide (youtube_id must be "")
+All 3 videos MUST have real, working, embeddable 11-char YouTube IDs from major channels (Traversy Media, Fireship, freeCodeCamp, TechWorld with Nana, Andrej Karpathy, NetworkChuck, etc.).
 Return ONLY the JSON array.
 """.strip()
 
@@ -396,23 +397,23 @@ def _static_recommendations(goal: str) -> List[ContentItem]:
     g = goal.lower()
     if any(k in g for k in ["react", "hooks", "frontend", "javascript"]):
         return [
-            ContentItem(type="video",   title="React useEffect Full Deep Dive",            youtube_id="SqcY0GlETPk", url="https://www.youtube.com/watch?v=SqcY0GlETPk", duration="14 min",      reason="Why: Covers every edge-case of useEffect memory leaks directly aligned with your goal.", signal_score=98),
-            ContentItem(type="short",   title="useState vs useReducer in 60 Seconds",       youtube_id="bFRDIBR9zM8", url="https://www.youtube.com/shorts/bFRDIBR9zM8", duration="60 sec",      reason="Why: 60-second micro-refresher on the most commonly confused React hooks.",             signal_score=96),
-            ContentItem(type="reel",    title="React Reconciler Algorithm Visualised",       youtube_id="TNhaISOUy6Q", url="https://www.youtube.com/watch?v=TNhaISOUy6Q", duration="45 sec",      reason="Why: High-retention animation of React diffing — low cognitive load.",                  signal_score=95),
-            ContentItem(type="article", title="A Complete Guide to useEffect – Overreacted", youtube_id="",           url="https://overreacted.io/a-complete-guide-to-useeffect/", duration="8 min read",  reason="Why: The gold standard deep-dive article — foundational mental model.",                 signal_score=94),
+            ContentItem(type="video",   title="React useEffect Full Deep Dive",            youtube_id="SqcY0GlETPk", url="https://www.youtube.com/watch?v=SqcY0GlETPk", duration="14 min",   reason="Why: Covers every edge-case of useEffect memory leaks directly aligned with your goal.", signal_score=98),
+            ContentItem(type="video",   title="React Crash Course 2024 – Traversy Media",  youtube_id="w7ejDZ8SWv8", url="https://www.youtube.com/watch?v=w7ejDZ8SWv8", duration="60 min",   reason="Why: Comprehensive end-to-end React tutorial — builds real project skills fast.",        signal_score=97),
+            ContentItem(type="video",   title="JavaScript Full Course for Beginners",       youtube_id="PkZNo7MFNFg", url="https://www.youtube.com/watch?v=PkZNo7MFNFg", duration="3.5 hr",  reason="Why: Foundational JS mastery is required to write clean React code.",                  signal_score=96),
+            ContentItem(type="article", title="A Complete Guide to useEffect – Overreacted", youtube_id="",           url="https://overreacted.io/a-complete-guide-to-useeffect/", duration="8 min read", reason="Why: The gold standard deep-dive article — foundational mental model.", signal_score=94),
         ]
     if any(k in g for k in ["machine learning", "ml", "neural", "python", "ai", "deep learning"]):
         return [
-            ContentItem(type="video",   title="Neural Networks from Scratch – Karpathy",  youtube_id="VMj-3S1tku0", url="https://www.youtube.com/watch?v=VMj-3S1tku0", duration="25 min",      reason="Why: World-class backpropagation walkthrough from Andrej Karpathy — ideal for your ML goal.", signal_score=98),
-            ContentItem(type="short",   title="Gradient Descent in 60 Seconds",            youtube_id="IHZwWFHWa-w", url="https://www.youtube.com/shorts/IHZwWFHWa-w", duration="60 sec",      reason="Why: Instant gradient descent mental model — quick review before deeper practice.",          signal_score=96),
-            ContentItem(type="reel",    title="How a Neural Network Learns (Animated)",     youtube_id="aircAruvnKk", url="https://www.youtube.com/watch?v=aircAruvnKk", duration="45 sec",      reason="Why: Stunning visual of neural net weight updates — excellent visual recall.",               signal_score=95),
-            ContentItem(type="article", title="The Illustrated Transformer – Jay Alammar",  youtube_id="",           url="https://jalammar.github.io/illustrated-transformer/", duration="12 min read", reason="Why: The best single article for understanding attention mechanisms.",                       signal_score=94),
+            ContentItem(type="video",   title="Neural Networks from Scratch – Karpathy",    youtube_id="VMj-3S1tku0", url="https://www.youtube.com/watch?v=VMj-3S1tku0", duration="25 min",   reason="Why: World-class backpropagation walkthrough from Andrej Karpathy.",               signal_score=98),
+            ContentItem(type="video",   title="Machine Learning Full Course – StatQuest",   youtube_id="Gv9_4yMHFhI", url="https://www.youtube.com/watch?v=Gv9_4yMHFhI", duration="3.9 hr",  reason="Why: Clear, comprehensive ML foundations with visual explanations.",               signal_score=97),
+            ContentItem(type="video",   title="Deep Learning Crash Course – freeCodeCamp",  youtube_id="VyWAvY2CF9c", url="https://www.youtube.com/watch?v=VyWAvY2CF9c", duration="2.8 hr",  reason="Why: Hands-on deep learning with TensorFlow, perfect for your AI goal.",           signal_score=96),
+            ContentItem(type="article", title="The Illustrated Transformer – Jay Alammar",  youtube_id="",           url="https://jalammar.github.io/illustrated-transformer/", duration="12 min read", reason="Why: The best single article for understanding attention mechanisms.", signal_score=94),
         ]
     return [
-        ContentItem(type="video",   title="Deep Work – Achieve Peak Performance",   youtube_id="gTaJhjQHcf8", url="https://www.youtube.com/watch?v=gTaJhjQHcf8", duration="14 min",     reason="Why: Cal Newport deep work framework — directly boosts ability to reach your goal.",      signal_score=98),
-        ContentItem(type="short",   title="The 5-Second Rule in 60 Seconds",        youtube_id="k2TaFVANNTg", url="https://www.youtube.com/shorts/k2TaFVANNTg",  duration="60 sec",     reason="Why: Instant motivation trigger — activates momentum toward your goal.",                  signal_score=96),
-        ContentItem(type="reel",    title="Flow State Activation – Get Deep Focus",  youtube_id="QkOCbt_o2HY", url="https://www.youtube.com/watch?v=QkOCbt_o2HY", duration="45 sec",     reason="Why: Primes your brain for high-yield learning sessions.",                               signal_score=95),
-        ContentItem(type="article", title="The Feynman Technique – Learn Anything",  youtube_id="",           url="https://fs.blog/feynman-technique/", duration="6 min read", reason="Why: The best learning strategy — explains through teaching to lock in understanding.",  signal_score=94),
+        ContentItem(type="video",   title="Deep Work – Achieve Peak Performance",          youtube_id="gTaJhjQHcf8", url="https://www.youtube.com/watch?v=gTaJhjQHcf8", duration="14 min",  reason="Why: Cal Newport deep work framework — directly boosts ability to reach your goal.", signal_score=98),
+        ContentItem(type="video",   title="The Complete Developer Roadmap 2024",           youtube_id="ysEN5RaKOlA", url="https://www.youtube.com/watch?v=ysEN5RaKOlA", duration="18 min",  reason="Why: Structured career path guide — understand what to learn and in which order.",   signal_score=97),
+        ContentItem(type="video",   title="Build Projects to Get Hired as a Developer",    youtube_id="QkOCbt_o2HY", url="https://www.youtube.com/watch?v=QkOCbt_o2HY", duration="12 min",  reason="Why: Portfolio-building strategy to convert learning into career outcomes.",         signal_score=96),
+        ContentItem(type="article", title="The Feynman Technique – Learn Anything",        youtube_id="",           url="https://fs.blog/feynman-technique/", duration="6 min read", reason="Why: The best learning strategy — explains through teaching to lock in understanding.", signal_score=94),
     ]
 
 
