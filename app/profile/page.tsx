@@ -413,12 +413,8 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
           />
         </div>
 
-        {/* 3 & 4. Dual Graph Section: Radar Chart + Line Simulator */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* 3. Dynamic Identity & Aspirations Graph */}
-          <IdentityAspirationsGraph isDarkMode={isDarkMode} />
-
-          {/* 4. Generative "Future Self" Trajectory Simulator */}
+        {/* 3. Generative "Future Self" Trajectory Simulator */}
+        <div className="grid grid-cols-1 gap-8">
           <FutureSelfSimulator isDarkMode={isDarkMode} />
         </div>
         {/* Bottom Feature Nodes Matrix & Summary */}
