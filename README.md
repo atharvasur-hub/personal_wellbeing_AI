@@ -1,5 +1,7 @@
 # Personal Wellbeing AI (Synapse AI)
 
+**Live Demo**: [https://personal-wellbeing-ai.vercel.app/](https://personal-wellbeing-ai.vercel.app/)
+
 **Personal Wellbeing AI** is a comprehensive ecosystem designed to help you track, manage, and optimize your digital habits, focus levels, and overall wellbeing. By shifting passive consumption (doomscrolling) into active, goal-oriented creation, the application acts as a digital guardian and growth accelerator.
 
 ---
