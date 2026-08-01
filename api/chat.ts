@@ -55,6 +55,9 @@ export default async function POST(req: Request) {
             recommendedRestMinutes: z.number(),
           }),
           execute: async ({ stressIndicator, recommendedRestMinutes }) => {
+            // ADD IT RIGHT HERE:
+            console.log(`🚨 [BACKEND TRIGGERED] Burnout Shield active! Reason: ${stressIndicator}`);
+
             return {
               status: "BURNOUT_SHIELD_ACTIVATED",
               actionTaken: "Restricted high-friction endpoints. Enforcing cognitive reset.",
