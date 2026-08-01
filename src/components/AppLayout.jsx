@@ -34,6 +34,7 @@ import {
   Database,
   LogOut
 } from 'lucide-react';
+import CuratedFeed from './CuratedFeed';
 import { 
   fetchChatHistoryFromSupabase, 
   saveChatMessageToSupabase, 
@@ -175,10 +176,8 @@ export default function AppLayout({ currentUser, onLogout }) {
     setAiInputText('');
     setIsAiThinking(true);
 
-    // Save User message to Supabase PostgreSQL
     saveChatMessageToSupabase('user', textToSend);
 
-    // Call live AI Service (Gemini API / Fallback compiler)
     const result = await generateAIResponse(textToSend, aiInterfaceMessages);
 
     const aiMsg = { 
@@ -191,7 +190,6 @@ export default function AppLayout({ currentUser, onLogout }) {
     setAiInterfaceMessages(prev => [...prev, aiMsg]);
     setIsAiThinking(false);
 
-    // Save Assistant response to Supabase PostgreSQL
     saveChatMessageToSupabase('assistant', result.text, result.suggestions);
   };
 
@@ -211,7 +209,6 @@ export default function AppLayout({ currentUser, onLogout }) {
     e.preventDefault();
     setReflectionSaved(true);
     
-    // Save Reflection to Supabase PostgreSQL
     await saveReflectionToSupabase(reflectionMood, reflectionText);
 
     setTimeout(() => {
@@ -299,7 +296,6 @@ export default function AppLayout({ currentUser, onLogout }) {
                   }`} />
                   {!sidebarCollapsed && <span className="animate-fade-in">{item.label}</span>}
                   
-                  {/* Tooltip for collapsed state */}
                   {sidebarCollapsed && (
                     <div className={`absolute left-16 px-3 py-1.5 rounded-xl text-xs font-medium opacity-0 group-hover:opacity-100 pointer-events-none transition duration-150 z-40 whitespace-nowrap shadow-xl ${
                       isDarkMode ? 'bg-slate-800 text-white border border-slate-700' : 'bg-stone-900 text-white'
@@ -313,7 +309,7 @@ export default function AppLayout({ currentUser, onLogout }) {
           </nav>
         </div>
 
-        {/* User Profile Capsule & Logout at Bottom */}
+        {/* User Profile Capsule & Logout */}
         <div className={`p-3 rounded-2xl border shadow-sm flex items-center justify-between transition-opacity duration-300 ${
           isDarkMode 
             ? 'bg-slate-900/90 border-slate-800 text-slate-100' 
@@ -371,7 +367,6 @@ export default function AppLayout({ currentUser, onLogout }) {
               {activeMenu === 'journey' && 'JOURNEY MAP'}
             </span>
 
-            {/* Supabase connection indicator badge */}
             <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-mono font-bold ${
               supabase 
                 ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600' 
@@ -382,10 +377,7 @@ export default function AppLayout({ currentUser, onLogout }) {
             </div>
           </div>
 
-          {/* Top Right Action Icons, Dark Mode Toggle & Log Out Button */}
           <div className="flex items-center gap-3 relative">
-            
-            {/* Top Right Log Out Button */}
             {onLogout && (
               <button
                 onClick={onLogout}
@@ -401,7 +393,6 @@ export default function AppLayout({ currentUser, onLogout }) {
               </button>
             )}
 
-            {/* Dark Mode Toggle Switch Button */}
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               className={`px-3.5 py-2 rounded-full border shadow-sm flex items-center gap-2 text-xs font-extrabold transition-all duration-300 cursor-pointer ${
@@ -424,7 +415,6 @@ export default function AppLayout({ currentUser, onLogout }) {
               )}
             </button>
 
-            {/* Daily Reflection Action */}
             <button 
               onClick={() => setShowReflection(true)}
               className={`w-10 h-10 rounded-full border shadow-sm flex items-center justify-center transition hover:shadow-md cursor-pointer ${
@@ -437,7 +427,6 @@ export default function AppLayout({ currentUser, onLogout }) {
               <PenTool className="w-4 h-4" />
             </button>
 
-            {/* Notification Bell Action */}
             <button 
               onClick={() => setShowNotifications(!showNotifications)}
               className={`w-10 h-10 rounded-full border shadow-sm flex items-center justify-center transition relative hover:shadow-md cursor-pointer ${
@@ -453,7 +442,6 @@ export default function AppLayout({ currentUser, onLogout }) {
               }`} />
             </button>
 
-            {/* Notifications Dropdown Panel */}
             {showNotifications && (
               <div className={`absolute right-0 top-12 w-80 rounded-3xl border p-5 shadow-2xl z-50 flex flex-col gap-3 ${
                 isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-stone-200/80 text-stone-900'
@@ -517,8 +505,11 @@ export default function AppLayout({ currentUser, onLogout }) {
                   </p>
                 </div>
 
+                {/* PROMINENT AI CURATED FEED SECTION */}
+                <CuratedFeed isDarkMode={isDarkMode} />
+
                 {/* Dashboard Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* 1. Baseline Metrics Card */}
                   <div className={`rounded-3xl p-6 md:p-8 border relative overflow-hidden flex flex-col justify-between min-h-[360px] group transition-all duration-300 ${
                     isDarkMode 
@@ -1187,7 +1178,6 @@ export default function AppLayout({ currentUser, onLogout }) {
                       {msg.text}
                     </div>
 
-                    {/* Interactive suggestions pills */}
                     {msg.suggestions && msg.suggestions.length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-1">
                         {msg.suggestions.map((sug, idx) => (
@@ -1287,7 +1277,6 @@ export default function AppLayout({ currentUser, onLogout }) {
             ) : (
               <form onSubmit={handleSaveReflection} className="flex flex-col gap-4">
                 
-                {/* Mood Tag Selectors */}
                 <div className="flex flex-col gap-1.5">
                   <label className={`text-[10px] uppercase font-bold tracking-wider font-mono ${isDarkMode ? 'text-slate-400' : 'text-stone-400'}`}>Current cognitive Mood</label>
                   <div className="grid grid-cols-4 gap-2">
@@ -1308,7 +1297,6 @@ export default function AppLayout({ currentUser, onLogout }) {
                   </div>
                 </div>
 
-                {/* Prompt block text input */}
                 <div className="flex flex-col gap-1.5">
                   <label className={`text-[10px] uppercase font-bold tracking-wider font-mono ${isDarkMode ? 'text-slate-400' : 'text-stone-400'}`}>What did you build/learn today?</label>
                   <textarea
