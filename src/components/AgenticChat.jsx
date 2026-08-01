@@ -48,6 +48,7 @@ function useMockChat(activeAgent) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const streamIntervalRef = useRef(null);
 
   // Initialize with agent welcome message

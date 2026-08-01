@@ -21,7 +21,8 @@ import json
 import time
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import urllib.request
@@ -1851,6 +1852,11 @@ def generate_tutor_explanation(payload: TutorRequest):
         "topic": topic_text,
         "explanation": explanation_content
     }
+
+class UserSignup(BaseModel):
+    name: str
+    email: str
+    password: str
 
 @app.post("/signup")
 async def signup(user: UserSignup):
