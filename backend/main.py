@@ -137,11 +137,28 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+class TutorRequest(BaseModel):
+    topic: str
+
+@app.get("/")
+def home():
+    return {"status": "active"}
+
+@app.post("/api/tutor")
+def tutor_endpoint(payload: TutorRequest):
+    topic = payload.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=400, detail="Topic required")
+    
+    return {
+        "explanation": f"### Overview of **{topic}**\n\n1. **Core Concept**: {topic} is a key architectural component used to manage state, structure logic, and streamline execution.\n2. **Best Practices**: Ensure proper error handling, modular design, and clean separation of concerns."
+    }
 
 # --- 1. Database Setup ---
 # This creates a local file named 'users.db' and builds the table if it doesn't exist
@@ -1894,3 +1911,4 @@ async def root():
         "supabase": "connected" if supabase_client else "offline (using FastAPI in-memory fallback store)",
         "docs": "http://localhost:8000/docs"
     }
+>>>>>>> 32160e0d9b81898bd92554d6ce899aa28b5d789e
