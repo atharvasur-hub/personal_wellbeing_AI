@@ -732,7 +732,7 @@ def _build_suggestions(prompt: str) -> List[str]:
 async def root():
     return {
         "status": "Synapse AI FastAPI Backend Engine is running ✅",
-        "gemini": "connected" if gemini_model else "offline (add GEMINI_API_KEY to backend/.env)",
+        "gemini": "connected" if gemini_configured else "offline (add GEMINI_API_KEY to backend/.env)",
         "supabase": "connected" if supabase_client else "offline (using FastAPI in-memory fallback store)",
         "docs": "http://localhost:8000/docs"
     }
