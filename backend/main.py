@@ -143,11 +143,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-<<<<<<< HEAD
-    allow_origins=["*"], 
-=======
     allow_origins=["*"],
->>>>>>> bc247854a9b7da05250d553cfd13031e38fd75c5
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -362,11 +358,44 @@ def _get_user_profile_context(user_id: str) -> str:
 
 
 def _generate_smart_fallback(user_msg: str, user_id: str) -> str:
+    import re
     msg = user_msg.lower().strip()
     if msg.startswith("[") and "]" in msg:
         msg = msg.split("]", 1)[1].strip()
 
-    if any(k in msg for k in ["python", "pip", "django", "fastapi", "flask", "code", "script"]):
+    def has_word(word: str) -> bool:
+        return bool(re.search(r'\b' + re.escape(word) + r'\b', msg))
+
+    # Java specific
+    if has_word("java") and not (has_word("script") or has_word("javascript")):
+        return (
+            "☕ **Java Core & Enterprise Architecture:**\n\n"
+            "```java\n"
+            "// Object-Oriented Java Fundamentals\n"
+            "public class GrowthMilestone {\n"
+            "    private String name;\n"
+            "    private int score;\n\n"
+            "    public GrowthMilestone(String name, int score) {\n"
+            "        this.name = name;\n"
+            "        this.score = score;\n"
+            "    }\n\n"
+            "    public void display() {\n"
+            "        System.out.println(\"Milestone: \" + name + \" | Score: \" + score);\n"
+            "    }\n\n"
+            "    public static void main(String[] args) {\n"
+            "        GrowthMilestone milestone = new GrowthMilestone(\"Java System Design\", 98);\n"
+            "        milestone.display();\n"
+            "    }\n"
+            "}\n"
+            "```\n\n"
+            "**Core Java Pillars:**\n"
+            "1. **Object-Oriented Programming:** Encapsulation, Inheritance, Polymorphism, Abstraction.\n"
+            "2. **JVM & Memory Management:** Garbage Collection, Heap allocation, JIT Compilation.\n"
+            "3. **Enterprise Ecosystem:** Spring Boot microservices, Maven/Gradle, JPA/Hibernate."
+        )
+
+    # Python specific
+    if any(has_word(k) for k in ["python", "pip", "django", "fastapi", "flask", "code", "script"]):
         return (
             "🐍 **Python Technical Solution & Best Practices:**\n\n"
             "```python\n"
@@ -380,7 +409,6 @@ def _generate_smart_fallback(user_msg: str, user_id: str) -> str:
             "    score: int = Field(default=95, ge=0, le=100)\n\n"
             "@app.post('/api/v1/skills')\n"
             "async def register_skill(item: SkillItem):\n"
-            "    # Asynchronous database or service handler\n"
             "    return {'status': 'success', 'data': item.dict()}\n"
             "```\n\n"
             "**Key Architecture Highlights:**\n"
@@ -388,7 +416,9 @@ def _generate_smart_fallback(user_msg: str, user_id: str) -> str:
             "2. **Non-Blocking I/O:** `async def` handles concurrent connections smoothly.\n"
             "3. **Automatic Docs:** Swagger UI is auto-generated at `/docs`."
         )
-    elif any(k in msg for k in ["react", "frontend", "javascript", "js", "typescript", "ts", "css", "tailwind", "vite", "next"]):
+
+    # React & Frontend
+    if any(has_word(k) for k in ["react", "frontend", "javascript", "js", "typescript", "ts", "css", "tailwind", "vite", "next", "jsx", "tsx"]):
         return (
             "⚡ **React & Modern Frontend Solution:**\n\n"
             "```jsx\n"
@@ -416,7 +446,9 @@ def _generate_smart_fallback(user_msg: str, user_id: str) -> str:
             "- Wrap handlers in `useCallback` to prevent re-creation on render.\n"
             "- Handle loading & error UI explicitly."
         )
-    elif any(k in msg for k in ["ml", "machine learning", "ai", "deep learning", "pytorch", "tensorflow", "transformer", "llm", "rag", "neural"]):
+
+    # ML / AI (using word boundaries so "explain" does NOT match "ai"!)
+    if any(has_word(k) for k in ["ml", "ai", "pytorch", "tensorflow", "transformer", "llm", "rag", "neural"]):
         return (
             "🎯 **Deep Learning & PyTorch Tensor Pipeline:**\n\n"
             "```python\n"
@@ -441,7 +473,9 @@ def _generate_smart_fallback(user_msg: str, user_id: str) -> str:
             "- **Skip Connections:** Mitigates vanishing gradient in deep models.\n"
             "- **Batch Normalization:** Stabilizes distribution shifts during training."
         )
-    elif any(k in msg for k in ["system design", "microservice", "architecture", "scale", "redis", "kafka", "database", "sql", "nosql"]):
+
+    # System Design
+    if any(has_word(k) for k in ["system design", "microservice", "architecture", "scale", "redis", "kafka", "database", "sql", "nosql", "postgres"]):
         return (
             "🏗️ **System Design & Distributed Architecture:**\n\n"
             "1. **Read/Write Decoupling:**\n"
@@ -453,29 +487,32 @@ def _generate_smart_fallback(user_msg: str, user_id: str) -> str:
             "4. **API Gateway:**\n"
             "   - Deploy NGINX or Envoy with Token Bucket rate limiting."
         )
-    elif any(k in msg for k in ["tired", "exhaust", "burnout", "stress", "anxious", "rest", "sleep", "break", "fatigue", "guardian"]):
+
+    # Well-Being
+    if any(has_word(k) for k in ["tired", "exhaust", "burnout", "stress", "anxious", "rest", "sleep", "break", "fatigue", "guardian"]):
         return (
             "🌿 **Well-Being & Recovery Protocol:**\n\n"
             "1. **Cognitive Reset:** 10-minute non-screen break to flush cortical strain.\n"
             "2. **Box Breathing:** Inhale 4s, Hold 4s, Exhale 4s, Hold 4s (repeat 4 cycles).\n"
             "3. **Hydration & Visuals:** Drink 300ml water and apply 20-20-20 visual rest."
         )
-    elif any(k in msg for k in ["focus", "sprint", "habit", "pomodoro", "work"]):
+
+    # Focus
+    if any(has_word(k) for k in ["focus", "sprint", "habit", "pomodoro", "work"]):
         return (
             "🔥 **Deep Work Sprint Protocol:**\n\n"
             "- **Sprint Duration:** 50 minutes uninterrupted focus + 10 minutes recovery.\n"
             "- **Environment:** Zero phone notifications, single tab open.\n"
             "- **Goal:** Deliver one core sub-feature milestone."
         )
-    else:
-        return (
-            f"🧠 **Direct Technical & Strategic Response:**\n\n"
-            f"Regarding your query **\"{user_msg}\"**:\n\n"
-            "1. **Analysis:** Identify core requirements and decompose into modular steps.\n"
-            "2. **Implementation:** Start with a minimal reproducible proof-of-concept.\n"
-            "3. **Validation:** Add unit tests & profile performance bounds.\n\n"
-            "Let me know if you need code snippets or architecture diagrams for a specific tech stack!"
-        )
+
+    return (
+        f"🧠 **Direct Guidance on \"{user_msg}\":**\n\n"
+        f"1. **Core Concept:** Breakdown \"{user_msg}\" into fundamental principles, practical execution, and edge-case optimization.\n"
+        "2. **Practical Step:** Draft a minimal working snippet or summary outline in a 25-minute focus session.\n"
+        "3. **Verification:** Test your implementation and track progress in your **Journey Map**.\n\n"
+        "Ask if you'd like a complete code example or architecture diagram for a specific language!"
+    )
 
 
 @app.post("/api/chat", response_model=ChatResponse)

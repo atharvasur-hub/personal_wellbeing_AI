@@ -44,6 +44,82 @@ import {
 import { generateAIResponse } from '../lib/aiService';
 import { checkBackendHealth, getUserProfileFromBackend } from '../lib/backendApi';
 
+const renderFormattedOverlayMessage = (text) => {
+  if (!text) return null;
+
+  const renderLines = (chunk) => {
+    return chunk.split('\n').map((line, idx) => {
+      let content = line;
+      let isBullet = false;
+
+      if (line.trim().startsWith('- ') || line.trim().startsWith('* ')) {
+        content = line.replace(/^[-*]\s+/, '');
+        isBullet = true;
+      } else if (/^\d+\.\s+/.test(line.trim())) {
+        content = line.replace(/^\d+\.\s+/, '');
+        isBullet = true;
+      }
+
+      // Process inline code `code` and bold **text**
+      const inlineCodeParts = content.split(/`(.*?)`/g);
+      const parsedText = inlineCodeParts.map((part, partIdx) => {
+        if (partIdx % 2 === 1) {
+          return (
+            <code key={partIdx} className="bg-slate-800 text-emerald-300 font-mono text-xs px-1.5 py-0.5 rounded border border-white/10">
+              {part}
+            </code>
+          );
+        }
+        const boldParts = part.split(/\*\*(.*?)\*\*/g);
+        return boldParts.map((bPart, bIdx) =>
+          bIdx % 2 === 1 ? <strong key={bIdx} className="font-bold text-white dark:text-white">{bPart}</strong> : bPart
+        );
+      });
+
+      if (isBullet) {
+        return (
+          <div key={idx} className="flex gap-2 ml-3 my-1">
+            <span className="text-emerald-500 font-bold">•</span>
+            <div className="flex-1 leading-relaxed">{parsedText}</div>
+          </div>
+        );
+      }
+
+      return (
+        <p key={idx} className={line.trim() ? "mb-1.5 leading-relaxed" : "h-2"}>
+          {parsedText}
+        </p>
+      );
+    });
+  };
+
+  if (text.includes('```')) {
+    const parts = text.split(/(```[\s\S]*?```)/g);
+    return parts.map((part, idx) => {
+      if (part.startsWith('```')) {
+        const match = part.match(/^```(\w+)?\n?([\s\S]*?)```$/);
+        const lang = match ? match[1] || '' : '';
+        const codeContent = match ? match[2] : part.slice(3, -3);
+        return (
+          <div key={idx} className="my-3 rounded-xl bg-slate-950 border border-white/10 overflow-hidden font-mono text-xs shadow-md">
+            {lang && (
+              <div className="px-3 py-1 bg-white/5 border-b border-white/5 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                {lang}
+              </div>
+            )}
+            <pre className="p-3 text-emerald-300 overflow-x-auto whitespace-pre leading-relaxed">
+              <code>{codeContent.trim()}</code>
+            </pre>
+          </div>
+        );
+      }
+      return <div key={idx}>{renderLines(part)}</div>;
+    });
+  }
+
+  return renderLines(text);
+};
+
 export default function AppLayout({ currentUser, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -960,7 +1036,7 @@ export default function AppLayout({ currentUser, onLogout }) {
                       ? 'bg-teal-500 text-white border-teal-400 rounded-tr-none'
                       : isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-200 rounded-tl-none' : 'bg-white border-stone-100 text-stone-800 rounded-tl-none'
                       }`}>
-                      {msg.text}
+                      {renderFormattedOverlayMessage(msg.text)}
                     </div>
 
                     {msg.suggestions && msg.suggestions.length > 0 && (
