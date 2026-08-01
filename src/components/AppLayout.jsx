@@ -38,6 +38,7 @@ import CuratedFeed from './CuratedFeed';
 import AgenticOnboardingFlow from './AgenticOnboardingFlow';
 import HabitSteeringModal from './HabitSteeringModal';
 import FocusRoom from './FocusRoom';
+import NewUserGoalAssessmentModal from './NewUserGoalAssessmentModal';
 import {
   fetchChatHistoryFromSupabase,
   saveChatMessageToSupabase,
@@ -55,6 +56,9 @@ export default function AppLayout({ currentUser, onLogout }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showAIChatInterface, setShowAIChatInterface] = useState(false);
   const [showHabitModal, setShowHabitModal] = useState(false);
+  const [showAssessmentModal, setShowAssessmentModal] = useState(() => {
+    return !localStorage.getItem('synapse_onboarding_completed');
+  });
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   // Dynamic user data from Auth
@@ -378,6 +382,18 @@ export default function AppLayout({ currentUser, onLogout }) {
           </div>
 
           <div className="flex items-center gap-3 relative">
+            <button
+              onClick={() => setShowAssessmentModal(true)}
+              className={`px-3 py-2 rounded-full border shadow-sm flex items-center gap-1.5 text-xs font-extrabold transition cursor-pointer ${isDarkMode
+                ? 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/25'
+                : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
+                }`}
+              title="Recalibrate Goal & Current Condition Assessment"
+            >
+              <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" />
+              <span className="hidden md:inline">Goal Assessment</span>
+            </button>
+
             <button
               onClick={() => setShowHabitModal(true)}
               className={`px-3 py-2 rounded-full border shadow-sm flex items-center gap-1.5 text-xs font-extrabold transition cursor-pointer ${isDarkMode
@@ -995,6 +1011,17 @@ export default function AppLayout({ currentUser, onLogout }) {
         isOpen={showHabitModal}
         onClose={() => setShowHabitModal(false)}
         isDarkMode={isDarkMode}
+      />
+
+      {/* NEW USER GOAL & CURRENT CONDITION ASSESSMENT MODAL */}
+      <NewUserGoalAssessmentModal
+        isOpen={showAssessmentModal}
+        onClose={() => setShowAssessmentModal(false)}
+        currentUser={currentUser}
+        isDarkMode={isDarkMode}
+        onAssessmentComplete={() => {
+          setShowAssessmentModal(false);
+        }}
       />
 
       {/* FLOATING AI CHATBOT BUBBLE */}
