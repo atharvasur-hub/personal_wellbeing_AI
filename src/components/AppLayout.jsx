@@ -124,7 +124,7 @@ const renderFormattedOverlayMessage = (text) => {
 };
 
 export default function AppLayout({ currentUser, onLogout }) {
-  const [activeMenu, setActiveMenu] = useState('dashboard');
+  const [activeMenu, setActiveMenu] = useState('profile');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showReflection, setShowReflection] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -387,12 +387,12 @@ export default function AppLayout({ currentUser, onLogout }) {
     ));
   };
   const menuItems = [
+    { id: 'profile', label: 'Profile', icon: User },
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'focus', label: 'Focus Room', icon: Clock },
     { id: 'community', label: 'Community Hub', icon: Users },
     { id: 'journey', label: 'Journey Map', icon: Compass },
-    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
-    { id: 'profile', label: 'Profile', icon: User }
+    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy }
   ];
 
   return (

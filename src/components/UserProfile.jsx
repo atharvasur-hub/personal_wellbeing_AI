@@ -46,9 +46,6 @@ export default function UserProfile() {
         fetchUserData();
     }, []);
 
-    // Calculate dynamic progress bar width
-    const progressPercentage = Math.min((profile.currentXp / profile.nextLevelXp) * 100, 100);
-
     return (
         <div className="min-h-screen bg-slate-50 p-8 text-slate-800">
             <div className="max-w-5xl mx-auto space-y-8">
@@ -93,24 +90,6 @@ export default function UserProfile() {
                                 </div>
                             </div>
                         </div>
-                    </div>
-
-                    {/* Level Progression Bar */}
-                    <div className="w-full md:w-72 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                        <div className="flex justify-between text-sm font-semibold mb-2">
-                            <span>Level Progression</span>
-                            <span className="text-indigo-600">{Math.round(progressPercentage)}%</span>
-                        </div>
-                        <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                            <div
-                                className="bg-indigo-600 h-full rounded-full transition-all duration-1000 ease-out"
-                                style={{ width: `${progressPercentage}%` }}
-                            ></div>
-                        </div>
-                        <p className="text-xs text-slate-500 mt-3 flex justify-between">
-                            <span>Next Rank: Level {profile.level + 1}</span>
-                            <span>+{profile.nextLevelXp - profile.currentXp} XP needed</span>
-                        </p>
                     </div>
                 </div>
 
