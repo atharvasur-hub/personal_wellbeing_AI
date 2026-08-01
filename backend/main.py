@@ -537,12 +537,15 @@ async def recommend(req: GoalRequest):
     try:
         items = await _gemini_recommendations(req.goal, failed_concepts, recent_interests)
         if items:
-            return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
+            # Filter out any items the user has already watched (just in case LLM ignored prompt)
+            items = [i for i in items if i.title not in recent_interests]
+            if items:
+                return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
     except Exception as e:
         print(f"[FastAPI] Gemini recommendations error: {e}")
         pass
 
-    items = _static_recommendations(req.goal, failed_concepts)
+    items = _static_recommendations(req.goal, failed_concepts, recent_interests)
     return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
 
 
@@ -555,7 +558,7 @@ async def _gemini_recommendations(goal: str, failed_concepts: List[str] = [], re
     interest_instruction = ""
     if recent_interests:
         interests_str = ", ".join(recent_interests)
-        interest_instruction = f'\nThe user recently watched and completed these topics: {interests_str}. You MUST generate NEW, highly relevant recommendations that build on these specific topics to maintain their interest.'
+        interest_instruction = f'\nThe user recently watched and completed these topics: {interests_str}. You MUST NOT recommend these exact titles again. Generate 4 NEW, highly relevant recommendations.'
 
     prompt = f"""
 You are an expert learning curator AI. A user has stated this goal: "{goal}"
@@ -605,13 +608,14 @@ Return ONLY the JSON array.
     ]
 
 
-def _static_recommendations(goal: str, failed_concepts: List[str] = []) -> List[ContentItem]:
+def _static_recommendations(goal: str, failed_concepts: List[str] = [], recent_interests: List[str] = []) -> List[ContentItem]:
     is_gap = len(failed_concepts) > 0
     concepts_str = f" [{', '.join(failed_concepts)}]" if is_gap else ""
     g = goal.lower()
     
+    base_list = []
     if any(k in g for k in ["react", "hooks", "frontend", "javascript"]):
-        return [
+        base_list = [
             ContentItem(
                 type="podcast",
                 content_type="podcast",
@@ -658,8 +662,8 @@ def _static_recommendations(goal: str, failed_concepts: List[str] = []) -> List[
             ),
         ]
         
-    if any(k in g for k in ["machine learning", "ml", "neural", "python", "ai", "deep learning"]):
-        return [
+    elif any(k in g for k in ["machine learning", "ml", "neural", "python", "ai", "deep learning"]):
+        base_list = [
             ContentItem(
                 type="video",
                 title=f"Neural Networks from Scratch{concepts_str} – Karpathy",
@@ -701,10 +705,10 @@ def _static_recommendations(goal: str, failed_concepts: List[str] = []) -> List[
                 is_gap_fix=is_gap
             ),
         ]
-        
-    return [
-        ContentItem(
-            type="video",
+    else:
+        base_list = [
+            ContentItem(
+                type="video",
             title=f"Deep Work – Achieve Peak Performance{concepts_str}",
             youtube_id="gTaJhjQHcf8",
             url="https://www.youtube.com/watch?v=gTaJhjQHcf8",
@@ -744,6 +748,11 @@ def _static_recommendations(goal: str, failed_concepts: List[str] = []) -> List[
             is_gap_fix=is_gap
         ),
     ]
+
+    # Filter out already watched items
+    if recent_interests:
+        return [i for i in base_list if i.title not in recent_interests]
+    return base_list
 
 
 @app.post("/api/roadmap")
