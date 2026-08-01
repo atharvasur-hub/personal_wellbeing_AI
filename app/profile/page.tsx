@@ -10,7 +10,9 @@ import {
   Edit3,
   X,
   Save,
-  RotateCcw
+  RotateCcw,
+  Lock,
+  Info
 } from 'lucide-react';
 import VpmMetricsRow from './components/VpmMetricsRow';
 import IdentityAspirationsGraph from './components/IdentityAspirationsGraph';
@@ -92,19 +94,12 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
   const [pivotNotice, setPivotNotice] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState<boolean>(false);
 
-  // Edit form temporary state
+  // Edit form temporary state (User profile info only - metrics are system auto-tracked)
   const [editForm, setEditForm] = useState({
     name: userName,
     role: userRole,
     aspiration: userAspiration,
     email: userEmail,
-    streak: focusStreak,
-    level: userLevel,
-    xp: userXP,
-    focusTime: focusTime,
-    skillsVerified: skillsVerified,
-    goalVelocity: goalVelocity,
-    vpmIndex: vpmIndex
   });
 
   // Sync focus time live from localStorage
@@ -135,13 +130,6 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
       role: userRole,
       aspiration: userAspiration,
       email: userEmail,
-      streak: focusStreak,
-      level: userLevel,
-      xp: userXP,
-      focusTime: focusTime,
-      skillsVerified: skillsVerified,
-      goalVelocity: goalVelocity,
-      vpmIndex: vpmIndex
     });
     setIsEditing(true);
   };
@@ -152,26 +140,12 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
     setUserRole(editForm.role);
     setUserAspiration(editForm.aspiration);
     setUserEmail(editForm.email);
-    setFocusStreak(editForm.streak);
-    setUserLevel(editForm.level);
-    setUserXP(editForm.xp);
-    setFocusTime(editForm.focusTime);
-    setSkillsVerified(editForm.skillsVerified);
-    setGoalVelocity(editForm.goalVelocity);
-    setVpmIndex(editForm.vpmIndex);
 
     // Save to LocalStorage (User-scoped)
     setStorageItem('name', editForm.name);
     setStorageItem('role', editForm.role);
     setStorageItem('aspiration', editForm.aspiration);
     setStorageItem('email', editForm.email);
-    setStorageItem('streak', editForm.streak);
-    setStorageItem('level', editForm.level);
-    setStorageItem('xp', editForm.xp);
-    setStorageItem('focus_time', editForm.focusTime);
-    setStorageItem('skills_verified', editForm.skillsVerified);
-    setStorageItem('goal_velocity', editForm.goalVelocity);
-    setStorageItem('vpm_index', editForm.vpmIndex);
 
     setIsEditing(false);
   };
@@ -351,7 +325,7 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
         </div>
 
         {/* 5. Aspiration Decay & Pivot Alert */}
-        <AspirationPivotAlert isDarkMode={isDarkMode} onPivotAccept={handlePivotAccept} />
+        <AspirationPivotAlert isDarkMode={isDarkMode} currentUser={currentUser} onPivotAccept={handlePivotAccept} />
 
         {/* Notification Toast if Pivot Accepted */}
         {pivotNotice && (
@@ -447,7 +421,30 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
                       isDarkMode ? 'text-white' : 'text-stone-900'
                     }`}>{node.name}</h4>
                   </div>
-                  <span className="text-xs font-mono font-bold text-indigo-600">{node.level}</span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-xs font-mono font-bold text-indigo-600">{node.level}</span>
+                    <button
+                      onClick={() => {
+                        const key = currentUser?.id ? `synapse_user_${currentUser.id}_skipped_accepted_task` : 'synapse_skipped_accepted_task';
+                        const data = {
+                          skippedTopic: node.name,
+                          engagedTopic: 'Product Management',
+                          duration: '2 weeks'
+                        };
+                        localStorage.setItem(key, JSON.stringify(data));
+                        localStorage.setItem('synapse_skipped_accepted_task', JSON.stringify(data));
+                        window.dispatchEvent(new Event('synapse_skipped_task_updated'));
+                      }}
+                      className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border transition cursor-pointer ${
+                        isDarkMode 
+                          ? 'border-slate-700 bg-slate-900 text-slate-400 hover:text-rose-400 hover:border-rose-500/40' 
+                          : 'border-stone-200 bg-stone-100 text-stone-500 hover:text-rose-600 hover:border-rose-300'
+                      }`}
+                      title="Skip accepted task to test pivot alert"
+                    >
+                      Skip Task
+                    </button>
+                  </div>
                 </div>
                 <div className={`w-full h-2 rounded-full overflow-hidden border ${
                   isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-stone-200 border-stone-300/40'
@@ -537,135 +534,85 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className={`block text-xs font-mono font-bold uppercase mb-1.5 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
-                    User ID / Email
-                  </label>
-                  <input
-                    type="text"
-                    value={editForm.email}
-                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                    className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                      isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-300 text-stone-900'
-                    }`}
-                  />
-                </div>
-
-                <div>
-                  <label className={`block text-xs font-mono font-bold uppercase mb-1.5 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
-                    Focus Streak
-                  </label>
-                  <input
-                    type="text"
-                    value={editForm.streak}
-                    onChange={(e) => setEditForm({ ...editForm, streak: e.target.value })}
-                    className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                      isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-300 text-stone-900'
-                    }`}
-                  />
-                </div>
+              <div>
+                <label className={`block text-xs font-mono font-bold uppercase mb-1.5 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
+                  User ID / Email
+                </label>
+                <input
+                  type="text"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                  className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+                    isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-300 text-stone-900'
+                  }`}
+                />
               </div>
 
-              {/* VPM Performance Metrics Section */}
-              <div className="pt-2 border-t border-stone-200 dark:border-slate-800">
-                <span className={`block text-xs font-mono font-bold uppercase mb-3 text-indigo-500`}>
-                  VPM Performance Metrics
-                </span>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className={`block text-xs font-mono font-bold uppercase mb-1.5 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
-                      Focus Time Reclaimed
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={editForm.focusTime}
-                      onChange={(e) => setEditForm({ ...editForm, focusTime: e.target.value })}
-                      placeholder="e.g. 2h 15m"
-                      className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                        isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-300 text-stone-900'
-                      }`}
-                    />
+              {/* System-Tracked Performance Metrics (Read-Only) */}
+              <div className={`p-4 rounded-2xl border mt-2 transition-all ${
+                isDarkMode ? 'bg-slate-950/60 border-slate-800/80' : 'bg-stone-50/80 border-stone-200'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Lock className="w-3.5 h-3.5 text-indigo-400" />
+                    <span className={`text-xs font-mono font-bold uppercase text-indigo-500`}>
+                      Tracked Progress Metrics (Auto-Calculated)
+                    </span>
                   </div>
-
-                  <div>
-                    <label className={`block text-xs font-mono font-bold uppercase mb-1.5 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
-                      Skills Verified
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.skillsVerified}
-                      onChange={(e) => setEditForm({ ...editForm, skillsVerified: e.target.value })}
-                      placeholder="e.g. 12 Concepts"
-                      className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                        isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-300 text-stone-900'
-                      }`}
-                    />
-                  </div>
+                  <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-500 text-[10px] font-mono font-semibold border border-indigo-500/20">
+                    System Processed
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                  <div>
-                    <label className={`block text-xs font-mono font-bold uppercase mb-1.5 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
-                      Goal Velocity
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.goalVelocity}
-                      onChange={(e) => setEditForm({ ...editForm, goalVelocity: e.target.value })}
-                      placeholder="e.g. 84%"
-                      className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                        isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-300 text-stone-900'
-                      }`}
-                    />
+                <p className={`text-[11px] mb-3 flex items-start gap-1.5 ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
+                  <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-400" />
+                  <span>
+                    Focus streak and VPM performance metrics are automatically tracked from your deep work sessions, verified skills, and goal progress.
+                  </span>
+                </p>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  <div className={`p-2.5 rounded-xl border flex flex-col ${
+                    isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-stone-200'
+                  }`}>
+                    <span className="text-[10px] font-mono text-stone-400 dark:text-slate-500 uppercase">Focus Streak</span>
+                    <span className="text-xs font-bold font-mono text-indigo-500 dark:text-indigo-400 mt-0.5">{focusStreak}</span>
                   </div>
 
-                  <div>
-                    <label className={`block text-xs font-mono font-bold uppercase mb-1.5 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
-                      Value per Minute (VPM)
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.vpmIndex}
-                      onChange={(e) => setEditForm({ ...editForm, vpmIndex: e.target.value })}
-                      placeholder="e.g. $4.82/min"
-                      className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                        isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-300 text-stone-900'
-                      }`}
-                    />
+                  <div className={`p-2.5 rounded-xl border flex flex-col ${
+                    isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-stone-200'
+                  }`}>
+                    <span className="text-[10px] font-mono text-stone-400 dark:text-slate-500 uppercase">Focus Time</span>
+                    <span className="text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-0.5">{focusTime}</span>
                   </div>
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className={`block text-xs font-mono font-bold uppercase mb-1.5 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
-                    User Level
-                  </label>
-                  <input
-                    type="text"
-                    value={editForm.level}
-                    onChange={(e) => setEditForm({ ...editForm, level: e.target.value })}
-                    className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                      isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-300 text-stone-900'
-                    }`}
-                  />
-                </div>
+                  <div className={`p-2.5 rounded-xl border flex flex-col ${
+                    isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-stone-200'
+                  }`}>
+                    <span className="text-[10px] font-mono text-stone-400 dark:text-slate-500 uppercase">Skills Verified</span>
+                    <span className="text-xs font-bold font-mono text-violet-600 dark:text-violet-400 mt-0.5">{skillsVerified}</span>
+                  </div>
 
-                <div>
-                  <label className={`block text-xs font-mono font-bold uppercase mb-1.5 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
-                    XP Points
-                  </label>
-                  <input
-                    type="text"
-                    value={editForm.xp}
-                    onChange={(e) => setEditForm({ ...editForm, xp: e.target.value })}
-                    className={`w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                      isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-300 text-stone-900'
-                    }`}
-                  />
+                  <div className={`p-2.5 rounded-xl border flex flex-col ${
+                    isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-stone-200'
+                  }`}>
+                    <span className="text-[10px] font-mono text-stone-400 dark:text-slate-500 uppercase">Goal Velocity</span>
+                    <span className="text-xs font-bold font-mono text-amber-600 dark:text-amber-400 mt-0.5">{goalVelocity}</span>
+                  </div>
+
+                  <div className={`p-2.5 rounded-xl border flex flex-col ${
+                    isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-stone-200'
+                  }`}>
+                    <span className="text-[10px] font-mono text-stone-400 dark:text-slate-500 uppercase">VPM Index</span>
+                    <span className="text-xs font-bold font-mono text-teal-600 dark:text-teal-400 mt-0.5">{vpmIndex}</span>
+                  </div>
+
+                  <div className={`p-2.5 rounded-xl border flex flex-col ${
+                    isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-stone-200'
+                  }`}>
+                    <span className="text-[10px] font-mono text-stone-400 dark:text-slate-500 uppercase">Level & XP</span>
+                    <span className="text-xs font-bold font-mono text-indigo-600 dark:text-indigo-400 mt-0.5">Lvl {userLevel} ({userXP} XP)</span>
+                  </div>
                 </div>
               </div>
 

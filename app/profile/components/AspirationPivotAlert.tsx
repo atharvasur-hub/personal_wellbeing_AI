@@ -1,19 +1,92 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
+
+interface SkippedTaskData {
+  skippedTopic: string;
+  engagedTopic: string;
+  duration?: string;
+}
 
 interface AspirationPivotAlertProps {
   isDarkMode?: boolean;
   onPivotAccept?: (oldTopic: string, newTopic: string) => void;
+  currentUser?: {
+    id?: string;
+    name?: string;
+    email?: string;
+  } | null;
 }
 
-export default function AspirationPivotAlert({ isDarkMode = false, onPivotAccept }: AspirationPivotAlertProps) {
-  const [status, setStatus] = useState<'pending' | 'accepted' | 'dismissed'>('pending');
+export default function AspirationPivotAlert({ isDarkMode = false, onPivotAccept, currentUser }: AspirationPivotAlertProps) {
+  const [status, setStatus] = useState<'pending' | 'accepted' | 'dismissed'>('dismissed');
+  const [skippedTaskData, setSkippedTaskData] = useState<SkippedTaskData | null>(null);
 
-  if (status === 'dismissed') {
+  const getStorageKey = () => {
+    return currentUser?.id ? `synapse_user_${currentUser.id}_skipped_accepted_task` : 'synapse_skipped_accepted_task';
+  };
+
+  useEffect(() => {
+    const checkSkippedTask = () => {
+      const key = getStorageKey();
+      const raw = localStorage.getItem(key) || localStorage.getItem('synapse_skipped_accepted_task');
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.skippedTopic) {
+            setSkippedTaskData(parsed);
+            setStatus('pending');
+            return;
+          }
+        } catch (e) {
+          if (typeof raw === 'string' && raw.trim()) {
+            setSkippedTaskData({
+              skippedTopic: raw,
+              engagedTopic: 'Product Management',
+              duration: '2 weeks'
+            });
+            setStatus('pending');
+            return;
+          }
+        }
+      }
+      setSkippedTaskData(null);
+      setStatus('dismissed');
+    };
+
+    checkSkippedTask();
+
+    window.addEventListener('storage', checkSkippedTask);
+    window.addEventListener('synapse_skipped_task_updated', checkSkippedTask);
+    return () => {
+      window.removeEventListener('storage', checkSkippedTask);
+      window.removeEventListener('synapse_skipped_task_updated', checkSkippedTask);
+    };
+  }, [currentUser]);
+
+  if (status === 'dismissed' || !skippedTaskData) {
     return null;
   }
+
+  const handleDismiss = () => {
+    setStatus('dismissed');
+    localStorage.removeItem(getStorageKey());
+    localStorage.removeItem('synapse_skipped_accepted_task');
+  };
+
+  const handleAccept = () => {
+    setStatus('accepted');
+    const oldTopic = skippedTaskData.skippedTopic;
+    const newTopic = skippedTaskData.engagedTopic || 'Product Management';
+    localStorage.removeItem(getStorageKey());
+    localStorage.removeItem('synapse_skipped_accepted_task');
+    if (onPivotAccept) onPivotAccept(oldTopic, newTopic);
+  };
+
+  const skippedTopic = skippedTaskData.skippedTopic;
+  const engagedTopic = skippedTaskData.engagedTopic || 'Product Management';
+  const duration = skippedTaskData.duration || '2 weeks';
 
   return (
     <div className="w-full transition-all duration-300">
@@ -54,14 +127,14 @@ export default function AspirationPivotAlert({ isDarkMode = false, onPivotAccept
                 <p className={`text-sm font-medium leading-relaxed ${
                   isDarkMode ? 'text-slate-200' : 'text-stone-800'
                 }`}>
-                  <strong className={isDarkMode ? 'text-amber-300' : 'text-amber-700'}>Notice:</strong> You've skipped <span className="text-rose-600 font-semibold underline decoration-rose-400 font-mono text-xs">'Hardware Engineering'</span> content for 2 weeks but engaged heavily with <span className="text-teal-700 font-semibold underline decoration-teal-400 font-mono text-xs">'Product Management'</span>. Would you like to officially pivot your Identity Graph?
+                  <strong className={isDarkMode ? 'text-amber-300' : 'text-amber-700'}>Notice:</strong> You've skipped <span className="text-rose-600 font-semibold underline decoration-rose-400 font-mono text-xs">'{skippedTopic}'</span> content for {duration} but engaged heavily with <span className="text-teal-700 font-semibold underline decoration-teal-400 font-mono text-xs">'{engagedTopic}'</span>. Would you like to officially pivot your Identity Graph?
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2.5 self-end lg:self-center shrink-0">
               <button
-                onClick={() => setStatus('dismissed')}
+                onClick={handleDismiss}
                 className={`rounded-xl border px-3.5 py-2 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
                   isDarkMode 
                     ? 'border-slate-700 bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white' 
@@ -72,10 +145,7 @@ export default function AspirationPivotAlert({ isDarkMode = false, onPivotAccept
                 Dismiss
               </button>
               <button
-                onClick={() => {
-                  setStatus('accepted');
-                  if (onPivotAccept) onPivotAccept('Hardware Engineering', 'Product Management');
-                }}
+                onClick={handleAccept}
                 className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-2 text-xs font-bold text-white shadow-md shadow-amber-500/20 transition hover:from-amber-400 hover:to-orange-500 flex items-center gap-1.5 cursor-pointer"
               >
                 <CheckCircle2 className="h-4 w-4" />
@@ -93,11 +163,11 @@ export default function AspirationPivotAlert({ isDarkMode = false, onPivotAccept
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="h-5 w-5 text-emerald-600" />
             <span>
-              <strong>Identity Graph Recalibrated!</strong> 'Hardware Engineering' weight reduced by 40% and 'Product Management' elevated to Primary Focus Node.
+              <strong>Identity Graph Recalibrated!</strong> '{skippedTopic}' weight reduced by 40% and '{engagedTopic}' elevated to Primary Focus Node.
             </span>
           </div>
           <button
-            onClick={() => setStatus('dismissed')}
+            onClick={handleDismiss}
             className="text-emerald-700 hover:text-emerald-900 text-xs underline cursor-pointer"
           >
             Hide Notice
@@ -107,3 +177,4 @@ export default function AspirationPivotAlert({ isDarkMode = false, onPivotAccept
     </div>
   );
 }
+

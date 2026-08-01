@@ -17,6 +17,8 @@ import {
   Moon,
   Sun,
   ShieldCheck,
+  Zap,
+  Trophy,
   LogOut
 } from 'lucide-react';
 import CuratedFeed from './CuratedFeed';
