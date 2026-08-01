@@ -8,7 +8,6 @@ import {
   Volume2,
   VolumeX,
   CheckCircle2,
-  ShieldAsync,
   Lock,
   CloudRain
 } from 'lucide-react';

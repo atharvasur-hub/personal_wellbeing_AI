@@ -39,6 +39,7 @@ import AgenticOnboardingFlow from './AgenticOnboardingFlow';
 import HabitSteeringModal from './HabitSteeringModal';
 import FocusRoom from './FocusRoom';
 import NewUserGoalAssessmentModal from './NewUserGoalAssessmentModal';
+import UserJourneyTimeline from './UserJourneyTimeline';
 import {
   fetchChatHistoryFromSupabase,
   saveChatMessageToSupabase,
