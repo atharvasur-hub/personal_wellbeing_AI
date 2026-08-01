@@ -292,8 +292,8 @@ export default function FocusRoom({ isDarkMode = false }) {
               onChange={(e) => setFocusTask(e.target.value)}
               placeholder="What specific task will you complete in this sprint?"
               className={`w-full border rounded-2xl px-5 py-3.5 text-xs md:text-sm font-semibold focus:outline-none transition shadow-sm ${isDarkMode
-                  ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-500 focus:border-indigo-500'
-                  : 'bg-stone-50 border-stone-200 text-stone-800 focus:border-teal-500'
+                ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-500 focus:border-indigo-500'
+                : 'bg-stone-50 border-stone-200 text-stone-800 focus:border-teal-500'
                 }`}
             />
           </div>
@@ -338,8 +338,8 @@ export default function FocusRoom({ isDarkMode = false }) {
           <button
             onClick={handleStartFocus}
             className={`w-full py-4 rounded-2xl text-white font-black text-sm tracking-wider uppercase shadow-xl transition flex items-center justify-center gap-2 cursor-pointer ${isDarkMode
-                ? 'bg-gradient-to-r from-indigo-500 via-violet-600 to-teal-400 hover:shadow-indigo-500/25'
-                : 'bg-gradient-to-r from-teal-400 via-cyan-500 to-indigo-500 hover:shadow-teal-500/25'
+              ? 'bg-gradient-to-r from-indigo-500 via-violet-600 to-teal-400 hover:shadow-indigo-500/25'
+              : 'bg-gradient-to-r from-teal-400 via-cyan-500 to-indigo-500 hover:shadow-teal-500/25'
               }`}
           >
             <Lock className="w-5 h-5" />
@@ -351,8 +351,8 @@ export default function FocusRoom({ isDarkMode = false }) {
       {/* ACTIVE COUNTDOWN TIMER CHAMBER */}
       {isActive && (
         <div className={`rounded-[2.5rem] p-8 md:p-14 border shadow-2xl backdrop-blur-2xl text-center flex flex-col items-center justify-center gap-8 relative overflow-hidden animate-fade-in ${isDarkMode
-            ? 'bg-slate-900/95 border-indigo-500/30 text-slate-100 shadow-indigo-500/20'
-            : 'bg-white/95 border-teal-200 text-stone-900 shadow-teal-500/20'
+          ? 'bg-slate-900/95 border-indigo-500/30 text-slate-100 shadow-indigo-500/20'
+          : 'bg-white/95 border-teal-200 text-stone-900 shadow-teal-500/20'
           }`}>
 
           <div className="flex items-center justify-between w-full pb-4 border-b border-stone-200/40">
@@ -366,8 +366,8 @@ export default function FocusRoom({ isDarkMode = false }) {
               <button
                 onClick={() => setWhiteNoiseActive(!whiteNoiseActive)}
                 className={`p-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${whiteNoiseActive
-                    ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300 shadow-sm'
-                    : isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-stone-100 border-stone-200 text-stone-500'
+                  ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300 shadow-sm'
+                  : isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-stone-100 border-stone-200 text-stone-500'
                   }`}
                 title="Toggle Clean White Noise Generator"
               >
@@ -378,8 +378,8 @@ export default function FocusRoom({ isDarkMode = false }) {
               <button
                 onClick={() => setAmbientAudioActive(!ambientAudioActive)}
                 className={`p-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${ambientAudioActive
-                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
-                    : isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-stone-100 border-stone-200 text-stone-500'
+                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
+                  : isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-stone-100 border-stone-200 text-stone-500'
                   }`}
                 title="Toggle 40Hz Binaural Ambient Audio"
               >
@@ -441,8 +441,8 @@ export default function FocusRoom({ isDarkMode = false }) {
             <button
               onClick={() => setIsPaused(!isPaused)}
               className={`px-6 py-3 rounded-2xl border text-xs font-black uppercase tracking-wider flex items-center gap-2 transition cursor-pointer ${isPaused
-                  ? 'bg-emerald-500 border-emerald-400 text-white shadow-md'
-                  : isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-stone-100 border-stone-200 text-stone-800'
+                ? 'bg-emerald-500 border-emerald-400 text-white shadow-md'
+                : isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-stone-100 border-stone-200 text-stone-800'
                 }`}
             >
               {isPaused ? <Play className="w-4 h-4 fill-current" /> : <Pause className="w-4 h-4" />}
