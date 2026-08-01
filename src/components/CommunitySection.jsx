@@ -66,7 +66,14 @@ export default function CommunitySection({ isDarkMode = false, currentUser = nul
           throw new Error("Failed to load community group configuration.");
         }
         setCommunity(groupData);
-        setCohortMembers(mockUsersList[groupData.id] || []);
+        
+        let membersToSet = mockUsersList[groupData.id] || [];
+        if (groupData.members && groupData.members.length > 0) {
+           const realNames = new Set(groupData.members.map(m => m.name));
+           const filteredMocks = membersToSet.filter(m => !realNames.has(m.name));
+           membersToSet = [...groupData.members, ...filteredMocks];
+        }
+        setCohortMembers(membersToSet);
 
         // 2. Fetch community messages
         const msgsResult = await getCommunityMessages(groupData.id);
