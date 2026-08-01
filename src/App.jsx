@@ -1,25 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import AuthPage from './components/AuthPage';
 import AppLayout from './components/AppLayout';
-import { getCurrentUser, signOutUser } from './lib/supabaseClient';
+import { getCurrentUser, signOutUser, subscribeToAuthState } from './lib/supabaseClient';
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Initial check for logged in user
     async function checkAuth() {
       const user = await getCurrentUser();
       if (user) {
-        setCurrentUser({
-          email: user.email,
-          name: user.user_metadata?.display_name || user.email.split('@')[0],
-          id: user.id
-        });
+        setCurrentUser(user);
       }
       setLoading(false);
     }
     checkAuth();
+
+    // Subscribe to Google OAuth redirect callbacks & session updates
+    const unsubscribe = subscribeToAuthState((userData) => {
+      if (userData) {
+        setCurrentUser(userData);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const handleLoginSuccess = (userData) => {
@@ -34,7 +41,7 @@ function App() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-tr from-cyan-400 via-indigo-500 to-fuchsia-500 flex items-center justify-center text-white font-mono text-sm">
-        Initializing Synapse Security Gateway...
+        Initializing Synapse Google Security Gateway...
       </div>
     );
   }

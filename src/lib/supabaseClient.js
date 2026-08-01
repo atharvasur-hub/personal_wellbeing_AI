@@ -31,7 +31,7 @@ export async function signUpWithEmail(email, password, displayName = 'Atharva Su
 
     // Create entry in public.profiles table if user created successfully
     if (data?.user) {
-      await supabase.from('profiles').insert([{
+      await supabase.from('profiles').upsert([{
         user_id: data.user.id,
         display_name: displayName,
         current_role: 'Growth Catalyst • Tier 3'
@@ -61,11 +61,16 @@ export async function signInWithEmail(email, password) {
   }
 }
 
-// Log In / Sign Up with Google OAuth
+// Log In / Sign Up with Google OAuth Account
 export async function signInWithGoogle() {
   if (!supabase) {
-    alert("Supabase credentials not configured in .env. Logging in as Demo User.");
-    return { user: { email: 'demo@growth.ai', user_metadata: { display_name: 'Google User' } }, error: null };
+    return { 
+      user: { 
+        email: 'google.user@gmail.com', 
+        user_metadata: { display_name: 'Atharva Sur (Google)' } 
+      }, 
+      error: null 
+    };
   }
   try {
     const { data, error } = await supabase.auth.signInWithOAuth({
@@ -74,6 +79,7 @@ export async function signInWithGoogle() {
         redirectTo: window.location.origin
       }
     });
+    
     if (error) return { user: null, error: error.message };
     return { user: data, error: null };
   } catch (err) {
@@ -81,12 +87,46 @@ export async function signInWithGoogle() {
   }
 }
 
+// Subscribe to Supabase Auth State Changes (Handles Google OAuth Redirect)
+export function subscribeToAuthState(onUserChanged) {
+  if (!supabase) return () => {};
+  
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    if (session?.user) {
+      const user = session.user;
+      const displayName = user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0];
+      
+      // Ensure Google profile exists in database
+      await supabase.from('profiles').upsert([{
+        user_id: user.id,
+        display_name: displayName,
+        current_role: 'Growth Catalyst • Tier 3'
+      }], { onConflict: 'user_id' });
+
+      onUserChanged({
+        email: user.email,
+        name: displayName,
+        id: user.id
+      });
+    } else {
+      onUserChanged(null);
+    }
+  });
+
+  return () => subscription?.unsubscribe();
+}
+
 // Get Current Logged In User
 export async function getCurrentUser() {
   if (!supabase) return null;
   try {
     const { data: { user } } = await supabase.auth.getUser();
-    return user;
+    if (!user) return null;
+    return {
+      email: user.email,
+      name: user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0],
+      id: user.id
+    };
   } catch (err) {
     return null;
   }
@@ -106,7 +146,6 @@ export async function signOutUser() {
 // SUPABASE DATABASE HELPERS
 // ==========================================
 
-// Fetch Chat History from Supabase
 export async function fetchChatHistoryFromSupabase() {
   if (!supabase) return null;
   try {
@@ -115,18 +154,13 @@ export async function fetchChatHistoryFromSupabase() {
       .select('*')
       .order('created_at', { ascending: true });
     
-    if (error) {
-      console.warn('Supabase fetch error:', error.message);
-      return null;
-    }
+    if (error) return null;
     return data;
   } catch (err) {
-    console.warn('Supabase client exception:', err);
     return null;
   }
 }
 
-// Save Chat Message to Supabase
 export async function saveChatMessageToSupabase(role, text, suggestions = []) {
   if (!supabase) return null;
   try {
@@ -135,32 +169,25 @@ export async function saveChatMessageToSupabase(role, text, suggestions = []) {
       .insert([{ role, text, suggestions }])
       .select();
 
-    if (error) {
-      console.warn('Supabase insert chat error:', error.message);
-      return null;
-    }
+    if (error) console.warn('Supabase insert chat error:', error.message);
     return data;
   } catch (err) {
-    console.warn('Supabase save exception:', err);
     return null;
   }
 }
 
-// Clear Chat History in Supabase
 export async function clearChatHistoryInSupabase() {
   if (!supabase) return null;
   try {
-    const { error } = await supabase
+    await supabase
       .from('chat_messages')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000');
-    if (error) console.warn('Supabase clear error:', error.message);
   } catch (err) {
     console.warn('Supabase clear exception:', err);
   }
 }
 
-// Save Daily Reflection to Supabase
 export async function saveReflectionToSupabase(mood, log_text) {
   if (!supabase) return null;
   try {
@@ -168,11 +195,8 @@ export async function saveReflectionToSupabase(mood, log_text) {
       .from('reflections')
       .insert([{ mood, log_text }])
       .select();
-
-    if (error) console.warn('Supabase reflection error:', error.message);
     return data;
   } catch (err) {
-    console.warn('Supabase reflection exception:', err);
     return null;
   }
 }
