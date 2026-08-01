@@ -24,7 +24,8 @@ import {
   Bot,
   Send,
   RefreshCw,
-  X
+  X,
+  Users
 } from 'lucide-react';
 import CuratedFeed from './CuratedFeed';
 import AgenticOnboardingFlow from './AgenticOnboardingFlow';
@@ -34,6 +35,7 @@ import VerifiedSkillsActiveRecall from './VerifiedSkillsActiveRecall';
 import NewUserGoalAssessmentModal from './NewUserGoalAssessmentModal';
 import UserJourneyTimeline from './UserJourneyTimeline';
 import ProfileVpmDashboard from './ProfileVpmDashboard';
+import CommunitySection from './CommunitySection';
 import {
   fetchChatHistoryFromSupabase,
   saveChatMessageToSupabase,
@@ -391,13 +393,13 @@ export default function AppLayout({ currentUser, onLogout }) {
       item.id === id ? { ...item, completed: !item.completed } : item
     ));
   };
-
   const menuItems = [
-    { id: 'profile', label: 'Profile', icon: User },
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'focus', label: 'Focus Room', icon: Clock },
     { id: 'skills', label: 'Verified Skills', icon: Brain },
-    { id: 'journey', label: 'Journey Map', icon: Compass }
+    { id: 'community', label: 'Community Hub', icon: Users },
+    { id: 'journey', label: 'Journey Map', icon: Compass },
+    { id: 'profile', label: 'Profile', icon: User }
   ];
 
   return (
@@ -534,6 +536,7 @@ export default function AppLayout({ currentUser, onLogout }) {
               {activeMenu === 'dashboard' && 'GROWTH WORKSPACE'}
               {activeMenu === 'profile' && 'IDENTITY & TRAJECTORY PROFILE'}
               {activeMenu === 'focus' && 'FOCUS ROOM'}
+              {activeMenu === 'community' && 'COHORT COMMUNITY HUB'}
               {activeMenu === 'journey' && 'JOURNEY MAP'}
             </span>
 
@@ -867,6 +870,11 @@ export default function AppLayout({ currentUser, onLogout }) {
             {/* VERIFIED SKILLS & ACTIVE RECALL VIEW */}
             {activeMenu === 'skills' && (
               <VerifiedSkillsActiveRecall isDarkMode={isDarkMode} currentUser={currentUser} />
+            )}
+
+            {/* COMMUNITY COHORT VIEW */}
+            {activeMenu === 'community' && (
+              <CommunitySection isDarkMode={isDarkMode} currentUser={currentUser} />
             )}
 
             {/* FULL PROFILE & VPM DASHBOARD VIEW */}

@@ -17,7 +17,6 @@ API DOCS:
 """
 
 import os
-<<<<<<< HEAD
 try:
     import google.generativeai as genai
 except ImportError:
@@ -26,7 +25,6 @@ except ImportError:
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-=======
 import json
 import time
 from typing import Optional, List, Dict, Any
@@ -36,7 +34,6 @@ from pydantic import BaseModel, Field
 import google.generativeai as genai
 
 # ── Load environment variables ────────────────────────────────
->>>>>>> 97c19adf819adf065e8e01b02069f23e19b599b3
 from dotenv import load_dotenv, find_dotenv
 
 load_dotenv(find_dotenv(usecwd=True))
@@ -45,9 +42,6 @@ GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY"
 if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_API_KEY_HERE" and genai:
     genai.configure(api_key=GEMINI_API_KEY)
 
-<<<<<<< HEAD
-app = FastAPI(title="Personal Wellbeing AI Backend", version="1.0.0")
-=======
 SUPABASE_URL   = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY   = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_ANON_KEY", "")
 
@@ -87,11 +81,6 @@ gemini_configured = bool(GEMINI_API_KEY)
 supabase_client = None
 if SUPABASE_URL and SUPABASE_KEY and "your-supabase" not in SUPABASE_URL:
     try:
-        from supabase import create_client
-        supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-    except Exception as e:
-        print(f"[FastAPI] Supabase init warning: {e}")
-        supabase_client = None
         from supabase import create_client
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
     except Exception as e:
@@ -145,7 +134,6 @@ app = FastAPI(
     description="Unified backend providing AI Chat, ML Recommendations, Digital Guardian, Focus Tracking, and User State Management.",
     version="2.0.0",
 )
->>>>>>> 97c19adf819adf065e8e01b02069f23e19b599b3
 
 app.add_middleware(
     CORSMiddleware,
@@ -155,50 +143,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-<<<<<<< HEAD
-class TutorRequest(BaseModel):
-    topic: str
-
-@app.get("/")
-def home():
-    return {"status": "active", "message": "Backend connected successfully"}
-
-@app.post("/api/tutor")
-def generate_tutor_explanation(payload: TutorRequest):
-    topic_text = payload.topic.strip()
-    
-    if not topic_text:
-        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
-    
-    # Check if Gemini is configured
-    if not genai or not GEMINI_API_KEY or GEMINI_API_KEY == "YOUR_GEMINI_API_KEY_HERE":
-        # Fallback explanation if API key is missing
-        explanation_content = (
-            f"⚠️ **Gemini API Key Missing**\n\n"
-            f"Please configure your `GEMINI_API_KEY` in the backend `.env` file to unlock real-time explanations for **{topic_text}**."
+# --- 1. Database Setup ---
+# This creates a local file named 'users.db' and builds the table if it doesn't exist
+def init_db():
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            email TEXT UNIQUE,
+            password TEXT
         )
-    else:
-        try:
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            prompt = (
-                f"You are an expert AI Tutor. The user is asking about or taking action on the topic: '{topic_text}'. "
-                f"Provide a clear, educational, and structured explanation. Use markdown with bullet points and bold text where appropriate."
-            )
-            response = model.generate_content(prompt)
-            explanation_content = response.text.strip()
-        except Exception as e:
-            print(f"Gemini API Error: {e}")
-            explanation_content = (
-                f"⚠️ **Error generating response**\n\n"
-                f"Could not fetch AI response for **{topic_text}**. Please try again later or check your API key constraints."
-            )
-    
-    return {
-        "status": "success",
-        "topic": topic_text,
-        "explanation": explanation_content
-    }
-=======
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS community_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            community_id TEXT,
+            sender_id TEXT,
+            sender_name TEXT,
+            role TEXT,
+            text TEXT,
+            is_announcement INTEGER DEFAULT 0,
+            created_at TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
 
 # ═══════════════════════════════════════════════════════════════
 # PYDANTIC SCHEMAS
@@ -1695,7 +1666,7 @@ async function executeDeepSkillTask(task, userWeights) {
     return {
         "status": "success",
         "skill": skill,
-        "question": req.question,
+"question": req.question,
         "answer": f"In **{skill}**, achieving high mastery requires understanding both top-level architectural abstractions and low-level performance characteristics. When addressing '{req.question}', the primary focus is isolating high-leverage bottlenecks and applying deterministic engineering patterns.",
         "code_snippet": fallback_code,
         "key_takeaways": [
@@ -1779,6 +1750,326 @@ def _build_suggestions(prompt: str) -> List[str]:
         return ["View sleep protocol", "Log energy baseline", "Start recovery sprint"]
     return ["Analyse my aspiration gap", "Generate a focus sprint", "Curate 4 resources"]
 
+# ═══════════════════════════════════════════════════════════════
+# 10. GOAL-BASED COMMUNITY COHORTS & AI FACILITATOR
+# ═══════════════════════════════════════════════════════════════
+
+class CommunityMessageRequest(BaseModel):
+    community_id: str
+    sender_id: str
+    sender_name: str
+    text: str
+    role: Optional[str] = "user"
+
+class TriggerAnnouncementRequest(BaseModel):
+    community_id: str
+
+def _classify_community(aspiration: str) -> dict:
+    asp = (aspiration or "").lower()
+    if any(k in asp for k in ["ai", "ml", "machine learning", "data science", "neural", "nlp", "computer vision", "intelligence", "llm"]):
+        return {
+            "id": "ai-ml",
+            "name": "🤖 AI & Machine Learning Hub",
+            "description": "Collaborate with neural architects, machine learning engineers, and researchers designing next-gen cognitive systems.",
+            "agent_name": "Aether-AI Facilitator",
+            "agent_avatar": "🤖",
+            "agent_prompt": "You are Aether-AI, the expert Community Facilitator AI for the AI & Machine Learning Hub. Keep announcements highly technical, motivational, and centered on AI systems, deep learning models, and training loops."
+        }
+    elif any(k in asp for k in ["software", "architect", "developer", "engineer", "full-stack", "backend", "frontend", "react", "rust", "web", "html", "css", "js", "javascript"]):
+        return {
+            "id": "full-stack",
+            "name": "💻 Software & Full-Stack Development",
+            "description": "Connect with backend, frontend, and systems engineers building scalable, reliable, and high-performance applications.",
+            "agent_name": "Nexus-Dev Facilitator",
+            "agent_avatar": "💻",
+            "agent_prompt": "You are Nexus-Dev, the expert Community Facilitator AI for the Software & Full-Stack Development cohort. Keep announcements practical, focusing on code quality, performance indexing, concurrent scaling, and software craftsmanship."
+        }
+    else:
+        return {
+            "id": "growth",
+            "name": "🌱 Peak Performance & Wellbeing",
+            "description": "Engage with productivity practitioners, founders, and growth catalysts training their deep work endurance and bio-routines.",
+            "agent_name": "Soma-Growth Facilitator",
+            "agent_avatar": "🌱",
+            "agent_prompt": "You are Soma-Growth, the expert Community Facilitator AI for the Peak Performance & Wellbeing cohort. Keep announcements focused on deep focus habits, circadian science, mental longevity, recovery protocols, and bio-routines."
+        }
+
+def _get_community_messages(community_id: str) -> List[Dict[str, Any]]:
+    try:
+        conn = sqlite3.connect("users.db")
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM community_messages WHERE community_id = ? ORDER BY id ASC", 
+            (community_id,)
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        
+        messages = []
+        for r in rows:
+            messages.append({
+                "id": r["id"],
+                "community_id": r["community_id"],
+                "sender_id": r["sender_id"],
+                "sender_name": r["sender_name"],
+                "role": r["role"],
+                "text": r["text"],
+                "is_announcement": bool(r["is_announcement"]),
+                "created_at": r["created_at"]
+            })
+        return messages
+    except Exception as e:
+        print(f"[FastAPI] SQLite community fetch error: {e}")
+        return [m for m in in_memory_db.get("community_messages", []) if m["community_id"] == community_id]
+
+def _record_community_message(community_id: str, sender_id: str, sender_name: str, role: str, text: str, is_announcement: bool = False):
+    created_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        conn = sqlite3.connect("users.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO community_messages (community_id, sender_id, sender_name, role, text, is_announcement, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (community_id, sender_id, sender_name, role, text, 1 if is_announcement else 0, created_at))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[FastAPI] SQLite community insert error: {e}")
+        
+    if "community_messages" not in in_memory_db:
+        in_memory_db["community_messages"] = []
+    
+    msg_obj = {
+        "id": int(time.time() * 1000),
+        "community_id": community_id,
+        "sender_id": sender_id,
+        "sender_name": sender_name,
+        "role": role,
+        "text": text,
+        "is_announcement": is_announcement,
+        "created_at": created_at
+    }
+    in_memory_db["community_messages"].append(msg_obj)
+    return msg_obj
+
+def seed_community_messages(community_id: str):
+    existing = _get_community_messages(community_id)
+    if existing:
+        return
+        
+    if community_id == "ai-ml":
+        _record_community_message(
+            "ai-ml", "agent_ai_ml", "Aether-AI Facilitator", "assistant",
+            "🚀 Welcome to the AI & Machine Learning Hub. I've compiled our baseline training objective: Reach 95%+ accuracy on local neural weights this week. Please review your active nodes and check the daily Curated Feed.",
+            is_announcement=True
+        )
+        _record_community_message("ai-ml", "usr_sophia", "Sophia Chen (ML Researcher)", "user", "Hey everyone! Glad to join this cohort. Currently parsing the illustrated transformer guide to optimize my embedding dimensions.")
+        _record_community_message("ai-ml", "usr_liam", "Liam Vance (Rust Dev)", "user", "Nice, Sophia! I'm working on running tokenization in Rust concurrency lanes. Need to reduce CPU context switching bottlenecks.")
+        _record_community_message(
+            "ai-ml", "agent_ai_ml", "Aether-AI Facilitator", "assistant",
+            "Excellent alignment, Liam. Context switching accounts for up to 14% energy decay in deep focus sprints. I recommend mapping your concurrency threads explicitly using worker pools.",
+            is_announcement=False
+        )
+    elif community_id == "full-stack":
+        _record_community_message(
+            "full-stack", "agent_fs", "Nexus-Dev Facilitator", "assistant",
+            "⚡ Welcome to the Software & Full-Stack Development cohort. Our goal this week is reducing client-side bundle size and mastering reactive concurrency. Pinned resource: React useEffect deep dive.",
+            is_announcement=True
+        )
+        _record_community_message("full-stack", "usr_alex", "Alex Mercer (Senior Full-Stack)", "user", "Hey all, just checked the useEffect guide. The explanation on clean-ups for abort controllers really cleaned up my socket listeners.")
+        _record_community_message("full-stack", "usr_emily", "Emily Watson (Frontend Lead)", "user", "Agreed! Also, has anyone profiled React 19 concurrent renders yet? Finding some layout shifts on strict-mode loads.")
+        _record_community_message(
+            "full-stack", "agent_fs", "Nexus-Dev Facilitator", "assistant",
+            "Emily, strict-mode doubles rendering intentionally to flag side-effects. To combat layout shifts, leverage useTransition to defer secondary paint cycles.",
+            is_announcement=False
+        )
+    else:
+        _record_community_message(
+            "growth", "agent_growth", "Soma-Growth Facilitator", "assistant",
+            "🌱 Welcome to the Peak Performance & Wellbeing cohort. Our foundational habit is anchoring 25-minute deep focus sprints with 5-minute restorative box breathing checks. Let's build momentum.",
+            is_announcement=True
+        )
+        _record_community_message("growth", "usr_dan", "Dan Koe (Productivity Coach)", "user", "Absolutely loving the digital guardian focus room. Intercepted 30 mins of mindless social scrolling this morning!")
+        _record_community_message("growth", "usr_clara", "Clara Oswald (Creative Founder)", "user", "Yes! My VPM index went up to $5.20/min after executing the Cal Newport Deep Work framework.")
+        _record_community_message(
+            "growth", "agent_growth", "Soma-Growth Facilitator", "assistant",
+            "Incredible progression, Clara. A VPM exceeding $5.00/min indicates high cognitive alignment. Ensure you take a 10,000 lux light exposure break to protect your circadian rhythm.",
+            is_announcement=False
+        )
+
+@app.get("/api/community/group")
+async def get_community_group(user_id: str = "usr_default"):
+    profile = in_memory_db["user_profiles"].get(user_id)
+    aspiration = ""
+    if profile:
+        aspiration = profile.get("aspiration") or ""
+    else:
+        if user_id == "usr_default":
+            aspiration = "Senior AI Architect"
+    return _classify_community(aspiration)
+
+@app.get("/api/community/messages")
+async def get_community_messages(community_id: str):
+    seed_community_messages(community_id)
+    messages = _get_community_messages(community_id)
+    return {"messages": messages}
+
+@app.post("/api/community/messages")
+async def post_community_message(req: CommunityMessageRequest):
+    msg = _record_community_message(
+        req.community_id, req.sender_id, req.sender_name, req.role or "user", req.text, is_announcement=False
+    )
+    if req.role == "user":
+        agent_info = None
+        for cid in ["ai-ml", "full-stack", "growth"]:
+            cdata = _classify_community(cid if cid == req.community_id else "other")
+            if cdata["id"] == req.community_id:
+                agent_info = cdata
+                break
+        
+        if agent_info:
+            agent_name = agent_info["agent_name"]
+            agent_prompt = agent_info["agent_prompt"]
+            recent_msgs = _get_community_messages(req.community_id)[-8:]
+            thread_context = "\n".join([f"{m['sender_name']}: {m['text']}" for m in recent_msgs])
+            
+            prompt = f"""
+{agent_prompt}
+
+You are in a community group chat. Here is the recent chat history:
+{thread_context}
+
+Provide a short, 1-2 sentence response addressed to the community or the last sender, offering technical insight, productivity feedback, or encouragement related to their discussion. Keep it concise, high-tech, and supportive. Do not use prefixes like "{agent_name}:". Just write the text.
+"""
+            ai_reply = _generate_gemini(prompt)
+            if not ai_reply:
+                if req.community_id == "ai-ml":
+                    ai_reply = f"Acknowledged. We should keep an eye on model overfitting when adjusting weights. Have you validated your training data profile?"
+                elif req.community_id == "full-stack":
+                    ai_reply = f"Excellent point. Always remember to decouple database calls from UI paint lifecycles to avoid bottlenecking."
+                else:
+                    ai_reply = f"Well observed. Regular energy logging is critical to maintaining a high focus trajectory. Keep up the sprint alignment!"
+            
+            _record_community_message(
+                req.community_id, f"agent_{req.community_id}", agent_name, "assistant", ai_reply, is_announcement=False
+            )
+            
+    return {"status": "success", "message": msg}
+
+@app.post("/api/community/trigger-announcement")
+async def trigger_community_announcement(req: TriggerAnnouncementRequest):
+    agent_info = None
+    for cid in ["ai-ml", "full-stack", "growth"]:
+        cdata = _classify_community(cid if cid == req.community_id else "other")
+        if cdata["id"] == req.community_id:
+            agent_info = cdata
+            break
+            
+    if not agent_info:
+        raise HTTPException(status_code=400, detail="Invalid community ID")
+        
+    agent_name = agent_info["agent_name"]
+    agent_prompt = agent_info["agent_prompt"]
+    
+    prompt = f"""
+{agent_prompt}
+
+Create a premium, motivational community announcement for today. It should be a Daily Challenge, a high-value Tip, or an Announcement of a core goal.
+It must contain:
+1. A catchy bold title
+2. An actionable 2-3 sentence description detailing a focus task or learning sprint.
+Keep the style extremely professional, high-tech, and direct. Do not include markdown backticks or system prefixes. Just write the announcement text.
+"""
+    announcement_text = _generate_gemini(prompt)
+    if not announcement_text:
+        if req.community_id == "ai-ml":
+            announcement_text = "**Daily Challenge: Loss Optimization**\n\nRun a 15-minute training calibration sprint. Attempt to reduce local weight entropy loss to below 0.10. Post your accuracy percentages in the chat!"
+        elif req.community_id == "full-stack":
+            announcement_text = "**Technical Tip: Async Hydration**\n\nAvoid loading layout states during hydrate cycles in concurrent React page renders. Use dynamic import boundaries to isolate resource-heavy charts."
+        else:
+            announcement_text = "**Wellbeing Protocol: 90-Min Focus Boundaries**\n\nEngage in a 90-minute intentional focus sprint, followed by a strict 10-minute zero-input recovery walk. Protect your cognitive bandwidth."
+            
+    msg = _record_community_message(
+        req.community_id, f"agent_{req.community_id}", agent_name, "assistant", announcement_text, is_announcement=True
+    )
+    return {"status": "success", "announcement": msg}
+
+
+class TutorRequest(BaseModel):
+    topic: str
+
+@app.post("/api/tutor")
+def generate_tutor_explanation(payload: TutorRequest):
+    topic_text = payload.topic.strip()
+    
+    if not topic_text:
+        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
+    
+    # Check if Gemini is configured
+    if not genai or not GEMINI_API_KEY or GEMINI_API_KEY == "YOUR_GEMINI_API_KEY_HERE":
+        # Fallback explanation if API key is missing
+        explanation_content = (
+            f"⚠️ **Gemini API Key Missing**\n\n"
+            f"Please configure your `GEMINI_API_KEY` in the backend `.env` file to unlock real-time explanations for **{topic_text}**."
+        )
+    else:
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            prompt = (
+                f"You are an expert AI Tutor. The user is asking about or taking action on the topic: '{topic_text}'. "
+                f"Provide a clear, educational, and structured explanation. Use markdown with bullet points and bold text where appropriate."
+            )
+            response = model.generate_content(prompt)
+            explanation_content = response.text.strip()
+        except Exception as e:
+            print(f"Gemini API Error: {e}")
+            explanation_content = (
+                f"⚠️ **Error generating response**\n\n"
+                f"Could not fetch AI response for **{topic_text}**. Please try again later or check your API key constraints."
+            )
+    
+    return {
+        "status": "success",
+        "success": True,
+        "topic": topic_text,
+        "explanation": explanation_content
+    }
+
+@app.post("/signup")
+async def signup(user: UserSignup):
+    try:
+        conn = sqlite3.connect("users.db")
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO users (name, email, password) VALUES (?, ?, ?)", 
+                       (user.name, user.email, user.password))
+        conn.commit()
+        conn.close()
+        return {
+            "message": "Identity registered successfully",
+            "access_token": f"token_for_{user.email}",
+            "token_type": "bearer"
+        }
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=400, detail="Identity Vector (Email) already registered.")
+
+@app.post("/login")
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT password FROM users WHERE email = ?", (form_data.username,))
+    result = cursor.fetchone()
+    conn.close()
+    if not result or result[0] != form_data.password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Access Denied: Invalid Identity Vector or Security Key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return {
+        "access_token": f"token_for_{form_data.username}", 
+        "token_type": "bearer"
+    }
 
 @app.get("/")
 async def root():
@@ -1788,4 +2079,3 @@ async def root():
         "supabase": "connected" if supabase_client else "offline (using FastAPI in-memory fallback store)",
         "docs": "http://localhost:8000/docs"
     }
->>>>>>> 97c19adf819adf065e8e01b02069f23e19b599b3
