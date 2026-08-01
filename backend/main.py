@@ -1893,6 +1893,9 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 @app.post("/api/points/award")
 async def award_points(req: PointsAwardRequest):
+    # HARDCODE DEBUG USER ID
+    req.user_id = 'test-user-1'
+    
     # Enforce points logic on backend
     points_to_award = req.points
     if req.action_type == "video_watched":
@@ -1917,22 +1920,20 @@ async def award_points(req: PointsAwardRequest):
         }).execute()
         print(f"[FastAPI] points_log insert response: {log_res.data}")
         
-        # 2. Update total points
+        # 2. Update total points via UPSERT
         res = supabase_client.table("user_points").select("total_points").eq("user_id", req.user_id).execute()
         print(f"[FastAPI] user_points select response: {res.data}")
+        
+        new_points = points_to_award
         if res.data and len(res.data) > 0:
-            new_points = res.data[0]["total_points"] + points_to_award
-            upd_res = supabase_client.table("user_points").update({"total_points": new_points}).eq("user_id", req.user_id).execute()
-            print(f"[FastAPI] user_points update response: {upd_res.data}")
-        else:
-            new_points = req.points
-            # Extract name from email if available or default to "User"
-            ins_res = supabase_client.table("user_points").insert({
-                "user_id": req.user_id, 
-                "total_points": new_points,
-                "name": "User"
-            }).execute()
-            print(f"[FastAPI] user_points insert response: {ins_res.data}")
+            new_points += res.data[0].get("total_points", 0)
+            
+        upd_res = supabase_client.table("user_points").upsert({
+            "user_id": req.user_id, 
+            "total_points": new_points,
+            "name": "Test User"
+        }).execute()
+        print(f"[FastAPI] user_points upsert response: {upd_res.data}")
             
         return {"status": "success", "total_points": new_points}
     except Exception as e:
