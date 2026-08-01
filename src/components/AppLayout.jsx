@@ -45,7 +45,7 @@ import {
   supabase
 } from '../lib/supabaseClient';
 import { generateAIResponse } from '../lib/aiService';
-import { checkBackendHealth, getUserProfileFromBackend } from '../lib/backendApi';
+import { checkBackendHealth, getUserProfileFromBackend, awardPoints } from '../lib/backendApi';
 
 const renderFormattedOverlayMessage = (text) => {
   if (!text) return null;
@@ -124,7 +124,8 @@ const renderFormattedOverlayMessage = (text) => {
 };
 
 export default function AppLayout({ currentUser, onLogout }) {
-  const [activeMenu, setActiveMenu] = useState('dashboard');
+  const [testPointsResponse, setTestPointsResponse] = useState(null);
+  const [activeMenu, setActiveMenu] = useState('profile');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showReflection, setShowReflection] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -387,12 +388,12 @@ export default function AppLayout({ currentUser, onLogout }) {
     ));
   };
   const menuItems = [
+    { id: 'profile', label: 'Profile', icon: User },
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'focus', label: 'Focus Room', icon: Clock },
     { id: 'community', label: 'Community Hub', icon: Users },
     { id: 'journey', label: 'Journey Map', icon: Compass },
-    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
-    { id: 'profile', label: 'Profile', icon: User }
+    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy }
   ];
 
   return (
@@ -560,6 +561,28 @@ export default function AppLayout({ currentUser, onLogout }) {
               <ShieldCheck className="w-4 h-4 text-amber-500" />
               <span className="hidden md:inline">Test Digital Guardian</span>
             </button>
+
+            <div className="flex flex-col gap-1 items-center">
+              <button
+                onClick={() => {
+                  setTestPointsResponse("Loading...");
+                  awardPoints('test-user-1', 'video_watched', 10).then(res => {
+                    setTestPointsResponse(JSON.stringify(res, null, 2));
+                    if (res && res.status === 'success') {
+                      window.dispatchEvent(new CustomEvent('pointsAwarded', { detail: { points: 10 } }));
+                    }
+                  }).catch(err => setTestPointsResponse(String(err)));
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-black text-sm rounded-lg shadow-lg border border-red-800 transition"
+              >
+                TEST ADD POINTS
+              </button>
+              {testPointsResponse && (
+                <div className="absolute top-16 bg-black text-lime-400 p-2 text-[10px] font-mono rounded max-w-xs overflow-auto shadow-xl z-50">
+                  <pre>{testPointsResponse}</pre>
+                </div>
+              )}
+            </div>
 
             {onLogout && (
               <button
