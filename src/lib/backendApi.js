@@ -174,43 +174,6 @@ export async function saveUserProfileToBackend(profileData) {
   return apiFetch('/api/user/profile', profileData);
 }
 
-// ── PILLAR 9: Deep Skill Focus & Model Self-Training ──────────
-export async function getDeepSkillState(userId = 'usr_default') {
-  return apiGet(`/api/deep-skill/state?user_id=${encodeURIComponent(userId)}`);
-}
-
-export async function trainDeepSkillModel(skills, condition, aspiration, triggerAction = 'calibration', userId = 'usr_default') {
-  return apiFetch('/api/deep-skill/train', {
-    user_id: userId,
-    skills,
-    condition,
-    aspiration,
-    trigger_action: triggerAction
-  });
-}
-
-export async function askDeepSkillQA(skill, question, history = [], userId = 'usr_default') {
-  return apiFetch('/api/deep-skill/qa', {
-    user_id: userId,
-    skill,
-    question,
-    history
-  });
-}
-
-export async function submitDeepSkillQuizAnswer(skill, question, selectedOption, correctOption, userId = 'usr_default') {
-  const result = await apiFetch('/api/deep-skill/submit-answer', {
-    user_id: userId,
-    skill,
-    question,
-    selected_option: selectedOption,
-    correct_option: correctOption
-  });
-  if (result) {
-    window.dispatchEvent(new CustomEvent('quizSubmitted'));
-  }
-  return result;
-}
 
 // ── PILLAR 10: Gamified Points System & Leaderboard ───────────
 export async function awardPoints(userId = 'usr_default', actionType, points) {
