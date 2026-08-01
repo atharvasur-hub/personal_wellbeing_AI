@@ -134,3 +134,4 @@ export default function VideoCard({ item, isDarkMode }) {
       </div>
     </div>
   );
+}

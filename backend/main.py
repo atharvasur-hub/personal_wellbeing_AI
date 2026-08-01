@@ -21,6 +21,7 @@ import sqlite3
 import json
 import time
 import urllib.request
+import traceback
 from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -240,6 +241,17 @@ class HabitCheckRequest(BaseModel):
     activity: str
     duration_minutes: int
     user_id: Optional[str] = "usr_default"
+
+class HabitSteeringRequest(BaseModel):
+    aspiration: str
+    fatigue_level: str
+    previous_fail_context: str
+    user_id: str = "usr_default"
+
+class UserSignup(BaseModel):
+    name: str
+    email: str
+    password: str
 
 class HabitCheckResponse(BaseModel):
     intercept_required: bool
@@ -1914,6 +1926,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 @app.post("/api/points/award")
 async def award_points(req: PointsAwardRequest):
+    print(f"--- [FastAPI Gamification] Received payload: {req.model_dump()} ---")
+    
     # HARDCODE DEBUG USER ID
     req.user_id = 'test-user-1'
     
@@ -1959,7 +1973,19 @@ async def award_points(req: PointsAwardRequest):
         return {"status": "success", "total_points": new_points}
     except Exception as e:
         print(f"[FastAPI] Points award error: {e}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/test-db")
+async def test_db():
+    if not supabase_client:
+        return {"status": "error", "message": "Supabase client not initialized"}
+    try:
+        res = supabase_client.table("user_points").select("*").limit(10).execute()
+        return {"status": "success", "data": res.data}
+    except Exception as e:
+        traceback.print_exc()
+        return {"status": "error", "error": str(e)}
 
 @app.get("/api/points/balance")
 async def get_points_balance(user_id: str = "usr_default"):
