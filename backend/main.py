@@ -1211,6 +1211,7 @@ def _fallback_assess_goal(baseline: str, aspiration: str, timeframe: str) -> Dic
         "initial_feed_topics": feed_topics
     }
 
+@app.post("/api/assess-goal", response_model=OnboardingAssessResponse)
 @app.post("/api/onboarding/assess-goal", response_model=OnboardingAssessResponse)
 async def assess_goal(req: OnboardingAssessRequest):
     """Post-auth onboarding step: assesses user baseline, goal, and timeframe via Gemini."""
