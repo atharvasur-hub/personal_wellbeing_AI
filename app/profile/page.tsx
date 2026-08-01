@@ -54,7 +54,7 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
 
   // Dynamic VPM performance metrics
   const [focusTime, setFocusTime] = useState<string>(() => {
-    return localStorage.getItem('synapse_profile_focus_time') || '2h 15m';
+    return localStorage.getItem('synapse_profile_focus_time') || '0h 0m';
   });
   const [skillsVerified, setSkillsVerified] = useState<string>(() => {
     return localStorage.getItem('synapse_profile_skills_verified') || '12 Concepts';
@@ -83,6 +83,19 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
     goalVelocity: goalVelocity,
     vpmIndex: vpmIndex
   });
+
+  // Sync focus time live from localStorage
+  useEffect(() => {
+    const syncFocusTime = () => {
+      const savedTime = localStorage.getItem('synapse_profile_focus_time');
+      if (savedTime) {
+        setFocusTime(savedTime);
+      }
+    };
+    syncFocusTime();
+    const interval = setInterval(syncFocusTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Keep form updated when opening edit mode
   useEffect(() => {
@@ -146,7 +159,7 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
     const defaultStreak = '4-Day Focus Streak';
     const defaultLevel = '14';
     const defaultXP = '3,420';
-    const defaultFocusTime = '2h 15m';
+    const defaultFocusTime = '0h 0m';
     const defaultSkills = '12 Concepts';
     const defaultVelocity = '84%';
     const defaultVpm = '$4.82/min';

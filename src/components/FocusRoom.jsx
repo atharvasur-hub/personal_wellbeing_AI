@@ -45,6 +45,25 @@ export default function FocusRoom({ isDarkMode = false }) {
     if (isActive && !isPaused && secondsLeft > 0) {
       interval = setInterval(() => {
         setSecondsLeft(prev => prev - 1);
+
+        // Accumulate active focus time in localStorage
+        const prevSecs = parseInt(localStorage.getItem('synapse_focus_seconds_total') || '0', 10);
+        const updatedSecs = prevSecs + 1;
+        localStorage.setItem('synapse_focus_seconds_total', updatedSecs.toString());
+
+        const hrs = Math.floor(updatedSecs / 3600);
+        const mins = Math.floor((updatedSecs % 3600) / 60);
+        const secs = updatedSecs % 60;
+
+        let formatted = '0h 0m';
+        if (hrs > 0) {
+          formatted = `${hrs}h ${mins}m`;
+        } else if (mins > 0) {
+          formatted = `0h ${mins}m`;
+        } else if (secs > 0) {
+          formatted = `${secs}s`;
+        }
+        localStorage.setItem('synapse_profile_focus_time', formatted);
       }, 1000);
     } else if (secondsLeft === 0 && isActive) {
       setIsActive(false);
