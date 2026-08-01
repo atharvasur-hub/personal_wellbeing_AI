@@ -124,7 +124,6 @@ const renderFormattedOverlayMessage = (text) => {
 };
 
 export default function AppLayout({ currentUser, onLogout }) {
-  const [testPointsResponse, setTestPointsResponse] = useState(null);
   const [activeMenu, setActiveMenu] = useState('profile');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showReflection, setShowReflection] = useState(false);
@@ -468,7 +467,7 @@ export default function AppLayout({ currentUser, onLogout }) {
           </nav>
         </div>
 
-        {!sidebarCollapsed && <PointsBadge isDarkMode={isDarkMode} />}
+        {/* Points Component removed from here and relocated to the top header */}
 
         {/* User Profile Capsule & Logout */}
         <div className={`p-3 rounded-2xl border shadow-sm flex items-center justify-between transition-opacity duration-300 ${isDarkMode
@@ -562,28 +561,6 @@ export default function AppLayout({ currentUser, onLogout }) {
               <span className="hidden md:inline">Test Digital Guardian</span>
             </button>
 
-            <div className="flex flex-col gap-1 items-center">
-              <button
-                onClick={() => {
-                  setTestPointsResponse("Loading...");
-                  awardPoints('test-user-1', 'video_watched', 10).then(res => {
-                    setTestPointsResponse(JSON.stringify(res, null, 2));
-                    if (res && res.status === 'success') {
-                      window.dispatchEvent(new CustomEvent('pointsAwarded', { detail: { points: 10 } }));
-                    }
-                  }).catch(err => setTestPointsResponse(String(err)));
-                }}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-black text-sm rounded-lg shadow-lg border border-red-800 transition"
-              >
-                TEST ADD POINTS
-              </button>
-              {testPointsResponse && (
-                <div className="absolute top-16 bg-black text-lime-400 p-2 text-[10px] font-mono rounded max-w-xs overflow-auto shadow-xl z-50">
-                  <pre>{testPointsResponse}</pre>
-                </div>
-              )}
-            </div>
-
             {onLogout && (
               <button
                 onClick={onLogout}
@@ -597,6 +574,9 @@ export default function AppLayout({ currentUser, onLogout }) {
                 <span className="hidden md:inline">Log Out</span>
               </button>
             )}
+
+            {/* Relocated Points Badge */}
+            <PointsBadge isDarkMode={isDarkMode} />
 
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}

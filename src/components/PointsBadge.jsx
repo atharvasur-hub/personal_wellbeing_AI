@@ -16,8 +16,8 @@ export default function PointsBadge({ isDarkMode }) {
     loadPoints();
 
     const handlePointsAwarded = (e) => {
-      const awarded = e.detail?.points || 0;
-      setPoints(prev => prev + awarded);
+      // Instead of just incrementing, we reload to ensure perfect sync with backend truth
+      loadPoints();
       setAnimate(true);
       setTimeout(() => setAnimate(false), 1000);
     };
@@ -27,15 +27,14 @@ export default function PointsBadge({ isDarkMode }) {
   }, []);
 
   return (
-    <div className={`px-4 py-2 mt-4 mx-4 rounded-xl flex items-center justify-between transition-all duration-300 ${
-      animate ? (isDarkMode ? 'bg-amber-500/20 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-amber-100 shadow-md scale-105') : (isDarkMode ? 'bg-slate-800' : 'bg-stone-100')
+    <div className={`px-3 py-1.5 rounded-full flex items-center gap-2 transition-all duration-300 border shadow-sm ${
+      animate 
+        ? (isDarkMode ? 'bg-amber-500/20 border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.2)]' : 'bg-amber-100 border-amber-300 shadow-md scale-105') 
+        : (isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-stone-200/80')
     }`}>
-      <div className="flex items-center gap-2">
-        <Sparkles className={`w-4 h-4 ${animate ? 'text-amber-400 animate-pulse' : (isDarkMode ? 'text-slate-400' : 'text-stone-500')}`} />
-        <span className={`text-xs font-bold uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>Points</span>
-      </div>
-      <div className={`font-mono font-extrabold text-sm transition-colors ${animate ? 'text-amber-500' : (isDarkMode ? 'text-slate-200' : 'text-stone-800')}`}>
-        {points.toLocaleString()}
+      <Sparkles className={`w-3.5 h-3.5 ${animate ? 'text-amber-400 animate-pulse' : 'text-amber-500'}`} />
+      <div className={`font-mono font-extrabold text-xs transition-colors ${animate ? 'text-amber-500' : (isDarkMode ? 'text-slate-200' : 'text-stone-800')}`}>
+        {points.toLocaleString()} PTS
       </div>
     </div>
   );
