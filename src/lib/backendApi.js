@@ -128,6 +128,15 @@ export async function getAspirationsFromBackend(userId = 'usr_default') {
   return apiGet(`/api/aspiration?user_id=${encodeURIComponent(userId)}`);
 }
 
+export async function assessGoalWithAI(baseline, aspiration, timeframe, userId = 'usr_default') {
+  return apiFetch('/api/onboarding/assess-goal', {
+    baseline,
+    aspiration,
+    timeframe,
+    user_id: userId
+  });
+}
+
 // ── PILLAR 6: Focus Room Sessions ─────────────────────────────
 export async function saveFocusSessionToBackend(sessionData) {
   return apiFetch('/api/focus-sessions', sessionData);
@@ -188,12 +197,16 @@ export async function askDeepSkillQA(skill, question, history = [], userId = 'us
 }
 
 export async function submitDeepSkillQuizAnswer(skill, question, selectedOption, correctOption, userId = 'usr_default') {
-  return apiFetch('/api/deep-skill/submit-answer', {
+  const result = await apiFetch('/api/deep-skill/submit-answer', {
     user_id: userId,
     skill,
     question,
     selected_option: selectedOption,
     correct_option: correctOption
   });
+  if (result) {
+    window.dispatchEvent(new CustomEvent('quizSubmitted'));
+  }
+  return result;
 }
 

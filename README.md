@@ -1,16 +1,68 @@
-# React + Vite
+# Personal Wellbeing AI (Synapse AI)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+**Personal Wellbeing AI** is a comprehensive ecosystem designed to help you track, manage, and optimize your digital habits, focus levels, and overall wellbeing. By shifting passive consumption (doomscrolling) into active, goal-oriented creation, the application acts as a digital guardian and growth accelerator.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 🏗 System Architecture
 
-## React Compiler
+The project consists of multiple interconnected services:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 1. Frontend Web Dashboard (`/src`)
+- **Tech Stack**: React 19, Vite, TailwindCSS v4, Recharts
+- **Description**: The primary interface for tracking your journey. It provides a visual representation of your progress (XP, levels), focus sprints, and AI-curated feeds tailored to your career aspirations.
 
-## Expanding the Oxlint configuration
+### 2. FastAPI Backend Engine (`/backend`)
+- **Tech Stack**: Python, FastAPI, Google Generative AI, Uvicorn
+- **Description**: The intelligence layer. It hosts API endpoints for managing ML models, data curation, habit steering algorithms, and interacts seamlessly with the Supabase database.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+### 3. Browser Extension / Digital Guardian (`/extension`)
+- **Tech Stack**: Vanilla JavaScript (Manifest V3)
+- **Description**: Your digital guardian. It runs in the background of your browser to track web usage, detect doomscrolling, and intercept or block distractor sites when a Focus Sprint is active.
+
+### 4. Calendar Utility (`/calendar-utility`)
+- **Tech Stack**: Node.js, TypeScript
+- **Description**: A service for automating schedule syncing with external calendar providers (e.g. Google Calendar, Outlook) to effortlessly schedule your deep work sessions.
+
+### 5. Database & Auth (Supabase)
+- **Tech Stack**: Supabase (PostgreSQL)
+- **Description**: The single source of truth handling user authentication, tracking metrics, and persisting focus sessions across all platforms. (See `supabase_schema.sql` for the schema structure).
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Node.js (v18+)
+- Python (3.10+)
+- Supabase account/project
+- Google Generative AI API key
+
+### Running the Frontend
+1. Navigate to the root directory.
+2. Install dependencies: `npm install`
+3. Run the development server:
+   ```bash
+   npm run dev
+   ```
+4. Access the dashboard at `http://localhost:5173/`.
+
+### Running the Backend
+1. Navigate to the `backend` directory: `cd backend`
+2. Install dependencies:
+   ```bash
+   pip install fastapi uvicorn google-generativeai supabase python-dotenv pydantic
+   ```
+3. Run the FastAPI engine:
+   ```bash
+   uvicorn main:app --reload --port 8000
+   ```
+4. API documentation is available at `http://localhost:8000/docs`.
+
+---
+
+## 🧠 Core Concepts
+
+- **Focus Sprints:** Uninterrupted blocks of work enforced by the Digital Guardian extension.
+- **Identity Graph:** AI-curated feeds matching your skills and career aspirations instead of mind-numbing social media.
+- **Journey Map:** A trajectory of your growth, visually transitioning you from baseline metrics to peak mastery (10/10 focus autonomy).

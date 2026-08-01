@@ -20,7 +20,7 @@ function App() {
     }
     return DEFAULT_USER;
   });
-  
+
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -71,7 +71,7 @@ function App() {
     }
   };
 
-  const handleAspirationComplete = ({ aspiration }) => {
+  const handleAspirationComplete = (_result) => {
     setShowAspirationSetup(false);
   };
 

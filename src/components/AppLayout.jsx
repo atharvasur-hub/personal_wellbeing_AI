@@ -30,6 +30,7 @@ import CuratedFeed from './CuratedFeed';
 import AgenticOnboardingFlow from './AgenticOnboardingFlow';
 import HabitSteeringModal from './HabitSteeringModal';
 import FocusRoom from './FocusRoom';
+import VerifiedSkillsActiveRecall from './VerifiedSkillsActiveRecall';
 import NewUserGoalAssessmentModal from './NewUserGoalAssessmentModal';
 import UserJourneyTimeline from './UserJourneyTimeline';
 import ProfileVpmDashboard from './ProfileVpmDashboard';
@@ -41,7 +42,7 @@ import {
   supabase
 } from '../lib/supabaseClient';
 import { generateAIResponse } from '../lib/aiService';
-import { checkBackendHealth } from '../lib/backendApi';
+import { checkBackendHealth, getUserProfileFromBackend } from '../lib/backendApi';
 
 export default function AppLayout({ currentUser, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
@@ -71,9 +72,80 @@ export default function AppLayout({ currentUser, onLogout }) {
     };
   }, []);
 
-  // Dynamic user data from Auth
-  const userName = currentUser?.name || 'Atharva Sur';
-  const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'AS';
+  // Check user profile on mount to see if goal is uninitialized
+  useEffect(() => {
+    async function checkProfileGoal() {
+      if (!currentUser?.id) return;
+      try {
+        const data = await getUserProfileFromBackend(currentUser.id);
+        if (data && data.profile) {
+          const profile = data.profile;
+          
+          if (!profile.aspiration || profile.aspiration.trim() === '') {
+            setShowAssessmentModal(true);
+            localStorage.removeItem('synapse_onboarding_completed');
+          } else {
+            // Profile is initialized, sync values to localStorage
+            const setKey = (key, val) => {
+              localStorage.setItem(`synapse_user_${currentUser.id}_${key}`, val || '');
+              localStorage.setItem(`synapse_profile_${key}`, val || '');
+            };
+            setKey('name', profile.name);
+            setKey('role', profile.role);
+            setKey('aspiration', profile.aspiration);
+            
+            if (profile.condition_vector) localStorage.setItem('synapse_user_condition_vector', profile.condition_vector);
+            if (profile.target_vector) localStorage.setItem('synapse_user_target_vector', profile.target_vector);
+            if (profile.initial_feed_topics) localStorage.setItem('synapse_user_feed_topics', JSON.stringify(profile.initial_feed_topics));
+            if (profile.roadmap) localStorage.setItem('synapse_user_roadmap', JSON.stringify(profile.roadmap));
+            
+            localStorage.setItem('synapse_onboarding_completed', 'true');
+            // Trigger local state updates
+            window.dispatchEvent(new Event('aspirationUpdated'));
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load user profile for onboarding check:', err);
+      }
+    }
+    checkProfileGoal();
+  }, [currentUser]);
+
+  // Dynamic user data from Auth with local storage sync
+  const getStorageItem = (key, fallback) => {
+    if (currentUser?.id) {
+      return localStorage.getItem(`synapse_user_${currentUser.id}_${key}`) || fallback;
+    }
+    return localStorage.getItem(`synapse_profile_${key}`) || fallback;
+  };
+
+  const [userName, setUserName] = useState(() => getStorageItem('name', '') || currentUser?.name || 'Atharva Sur');
+  const [userRole, setUserRole] = useState(() => getStorageItem('role', '') || 'Growth Catalyst • Tier 3');
+  const [userAspiration, setUserAspiration] = useState(() => getStorageItem('aspiration', '') || 'Senior AI Architect');
+  const [verifiedSkillsCount, setVerifiedSkillsCount] = useState(() => {
+    const displaySkillsCount = getStorageItem('skills_verified', '0 Concepts');
+    return parseInt(displaySkillsCount.split(' ')[0]) || 0;
+  });
+
+  const userInitials = (userName || 'AS').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'AS';
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setUserName(getStorageItem('name', '') || currentUser?.name || 'Atharva Sur');
+      setUserRole(getStorageItem('role', '') || 'Growth Catalyst • Tier 3');
+      setUserAspiration(getStorageItem('aspiration', '') || 'Senior AI Architect');
+      
+      const displaySkillsCount = getStorageItem('skills_verified', '0 Concepts');
+      setVerifiedSkillsCount(parseInt(displaySkillsCount.split(' ')[0]) || 0);
+    };
+    handleUpdate();
+    window.addEventListener('aspirationUpdated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('aspirationUpdated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, [currentUser]);
 
   // Reflection Modal States
   const [reflectionText, setReflectionText] = useState('');
@@ -197,7 +269,7 @@ export default function AppLayout({ currentUser, onLogout }) {
 
     saveChatMessageToSupabase('user', textToSend);
 
-    const result = await generateAIResponse(textToSend, aiInterfaceMessages);
+    const result = await generateAIResponse(textToSend, aiInterfaceMessages, currentUser?.id || 'usr_default');
 
     const aiMsg = {
       id: Date.now() + 1,
@@ -247,6 +319,7 @@ export default function AppLayout({ currentUser, onLogout }) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'focus', label: 'Focus Room', icon: Clock },
+    { id: 'skills', label: 'Verified Skills', icon: Brain },
     { id: 'journey', label: 'Journey Map', icon: Compass },
     { id: 'profile', label: 'Profile', icon: User }
   ];
@@ -308,6 +381,16 @@ export default function AppLayout({ currentUser, onLogout }) {
                     : 'text-stone-400 group-hover:scale-105'
                     }`} />
                   {!sidebarCollapsed && <span className="animate-fade-in">{item.label}</span>}
+
+                  {item.id === 'skills' && verifiedSkillsCount > 0 && (
+                    <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] font-mono font-bold animate-pulse ${
+                      isActive 
+                        ? 'bg-indigo-600 text-white' 
+                        : isDarkMode ? 'bg-indigo-500/25 text-indigo-300 border border-indigo-500/30' : 'bg-indigo-50 text-indigo-700 border border-indigo-150'
+                    }`}>
+                      {verifiedSkillsCount}
+                    </span>
+                  )}
 
                   {sidebarCollapsed && (
                     <div className={`absolute left-16 px-3 py-1.5 rounded-xl text-xs font-medium opacity-0 group-hover:opacity-100 pointer-events-none transition duration-150 z-40 whitespace-nowrap shadow-xl ${isDarkMode ? 'bg-slate-800 text-white border border-slate-700' : 'bg-stone-900 text-white'
@@ -526,10 +609,10 @@ export default function AppLayout({ currentUser, onLogout }) {
                 </div>
 
                 {/* AGENTIC ONBOARDING & EMBEDDED MEDIA FEED FLOW */}
-                <AgenticOnboardingFlow isDarkMode={isDarkMode} />
+                <AgenticOnboardingFlow isDarkMode={isDarkMode} currentUser={currentUser} />
 
                 {/* PROMINENT AI CURATED FEED SECTION */}
-                <CuratedFeed isDarkMode={isDarkMode} />
+                <CuratedFeed isDarkMode={isDarkMode} currentUser={currentUser} />
 
                 {/* Dashboard Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -698,7 +781,12 @@ export default function AppLayout({ currentUser, onLogout }) {
 
             {/* FOCUS ROOM VIEW */}
             {activeMenu === 'focus' && (
-              <FocusRoom isDarkMode={isDarkMode} />
+              <FocusRoom isDarkMode={isDarkMode} currentUser={currentUser} />
+            )}
+
+            {/* VERIFIED SKILLS & ACTIVE RECALL VIEW */}
+            {activeMenu === 'skills' && (
+              <VerifiedSkillsActiveRecall isDarkMode={isDarkMode} currentUser={currentUser} />
             )}
 
             {/* FULL PROFILE & VPM DASHBOARD VIEW */}
@@ -728,8 +816,11 @@ export default function AppLayout({ currentUser, onLogout }) {
         onClose={() => setShowAssessmentModal(false)}
         currentUser={currentUser}
         isDarkMode={isDarkMode}
-        onAssessmentComplete={() => {
+        onAssessmentComplete={(data) => {
           setShowAssessmentModal(false);
+          setUserName(data.name);
+          setUserRole(data.role);
+          setUserAspiration(data.aspiration);
         }}
       />
 

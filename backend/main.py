@@ -1,29 +1,8 @@
-"""
-=============================================================
- SYNAPSE AI — FastAPI Backend Engine
- Sole Backend for ML Models, Data Curation, Habit Steering,
- User Persistence & Auth Services
-=============================================================
-
-SETUP:
-  1. pip install fastapi uvicorn google-generativeai supabase python-dotenv pydantic
-
-RUN:
-  cd backend && uvicorn main:app --reload --port 8000
-
-API DOCS:
-  http://localhost:8000/docs
-=============================================================
-"""
-
-import os
-import json
-import time
-from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-import google.generativeai as genai
+from pydantic import BaseModel
+import sqlite3 # Built-in Python database!
 
 # ── Load environment variables ────────────────────────────────
 from dotenv import load_dotenv, find_dotenv
@@ -84,7 +63,7 @@ if SUPABASE_URL and SUPABASE_KEY and "your-supabase" not in SUPABASE_URL:
         supabase_client = None
 
 # ── Local In-Memory Fallback Database ──────────────────────────
-in_memory_db: Dict[str, List[Dict[str, Any]]] = {
+in_memory_db: Dict[str, Any] = {
     "chat_messages": [],
     "user_aspirations": [],
     "habit_steering_logs": [],
@@ -100,8 +79,28 @@ in_memory_db: Dict[str, List[Dict[str, Any]]] = {
         }
     ],
     "user_profiles": {},
-    "user_deep_skills": {}
+    "user_deep_skills": {},
+    "failed_concepts": {}
 }
+
+def _get_failed_concepts(user_id: str) -> List[str]:
+    if "failed_concepts" not in in_memory_db:
+        in_memory_db["failed_concepts"] = {}
+    return in_memory_db["failed_concepts"].setdefault(user_id, [])
+
+def _add_failed_concept(user_id: str, concept: str):
+    concepts = _get_failed_concepts(user_id)
+    if concept not in concepts:
+        concepts.append(concept)
+
+def _remove_failed_concept(user_id: str, concept: str):
+    concepts = _get_failed_concepts(user_id)
+    if concept in concepts:
+        try:
+            concepts.remove(concept)
+        except ValueError:
+            pass
+
 
 
 # ── FastAPI App Configuration ────────────────────────────────
@@ -113,16 +112,36 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
+    allow_origins=["http://localhost:5173"], 
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"], 
+    allow_headers=["*"], 
 )
 
+# --- 1. Database Setup ---
+# This creates a local file named 'users.db' and builds the table if it doesn't exist
+def init_db():
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            email TEXT UNIQUE,
+            password TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
 
-# ═══════════════════════════════════════════════════════════════
-# PYDANTIC SCHEMAS
-# ═══════════════════════════════════════════════════════════════
+# Run the setup when the file loads
+init_db()
+
+# --- Define the Signup Data Model ---
+class UserSignup(BaseModel):
+    name: str
+    email: str
+    password: str
 
 class ChatRequest(BaseModel):
     message: str
@@ -146,6 +165,8 @@ class ContentItem(BaseModel):
     duration: str
     reason: str
     signal_score: int
+    is_gap_fix: Optional[bool] = False
+
 
 class RecommendationResponse(BaseModel):
     goal: str
@@ -231,6 +252,31 @@ class DeepSkillQuizSubmitRequest(BaseModel):
     selected_option: int
     correct_option: int
 
+class OnboardingRequest(BaseModel):
+    user_id: Optional[str] = "usr_default"
+    name: Optional[str] = "User"
+    current_role: str
+    future_goal: str
+    timeline: Optional[str] = "6 Months"
+    skills: List[str] = []
+    condition: Optional[str] = "Deep Skill Focus"
+
+class Milestone(BaseModel):
+    phase: str
+    duration: str
+
+class OnboardingAssessRequest(BaseModel):
+    baseline: str
+    aspiration: str
+    timeframe: str
+    user_id: Optional[str] = "usr_default"
+
+class OnboardingAssessResponse(BaseModel):
+    condition_vector: str
+    target_vector: str
+    roadmap: List[Milestone]
+    initial_feed_topics: List[str]
+
 class RoadmapRequest(BaseModel):
     aspiration: str
     user_id: Optional[str] = "usr_default"
@@ -258,16 +304,54 @@ Keep responses concise (3-5 sentences max unless the user asks for detail).
 Always tie your advice directly to the user's stated goals and wellbeing.
 """.strip()
 
+def _get_user_profile_context(user_id: str) -> str:
+    profile = in_memory_db["user_profiles"].get(user_id)
+    deep_skill = in_memory_db["user_deep_skills"].get(user_id)
+    
+    name = profile.get("name") if profile else None
+    role = profile.get("role") if profile else None
+    aspiration = profile.get("aspiration") if profile else None
+    skills = deep_skill.get("skills") if deep_skill else None
+    condition = deep_skill.get("condition") if deep_skill else None
+
+    # Fallback to defaults
+    if not name or not role or not aspiration:
+        name = name or "Atharva Sur"
+        role = role or "Growth Catalyst • Tier 3"
+        aspiration = aspiration or "Senior AI Architect"
+    
+    skills_str = ", ".join(skills) if skills else "Systems Architecture, Deep Work Endurance, AI Alignment & Safety"
+    condition_str = condition or "Deep Skill Focus"
+    
+    context = (
+        f"User Session Information:\n"
+        f"- Name: {name}\n"
+        f"- Current Role: {role}\n"
+        f"- Career Goal/Aspiration: {aspiration}\n"
+        f"- Target Skills: {skills_str}\n"
+        f"- Current Condition: {condition_str}\n\n"
+        f"IMPORTANT GUIDANCE RULES FOR SYNAPSE AI:\n"
+        f"1. You are the 'brain' of the project. You must actively guide the user to bridge the gap between their current role ({role}) and their career goal ({aspiration}).\n"
+        f"2. Tailor your responses to focus on their target skills ({skills_str}).\n"
+        f"3. Incorporate their energy state/condition ({condition_str}) into recommendations. If they are burned out or seeking balance, advise recovery or time-boxing. If they are in deep focus, suggest intense, structured study sprints.\n"
+        f"4. Proactively prompt them with micro-steps they can take today to move closer to their goal."
+    )
+    return context
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     """Chatbot endpoint — powered by Gemini 2.0 Flash / 1.5 Flash."""
     user_id = req.user_id or "usr_default"
 
+    # Get user profile context to guide the user towards their goal
+    profile_context = _get_user_profile_context(user_id)
+
     context = "\n".join(
         f"{'User' if m.get('role') == 'user' else 'Synapse AI'}: {m.get('text') or m.get('content', '')}"
         for m in req.history[-6:]
     )
-    prompt = f"{CHAT_SYSTEM_PROMPT}\n\n"
+    prompt = f"{CHAT_SYSTEM_PROMPT}\n\n{profile_context}\n\n"
     if context:
         prompt += f"Conversation context:\n{context}\n\n"
     prompt += f"User: {req.message}\nSynapse AI:"
@@ -338,21 +422,30 @@ def _record_chat_message(user_id: str, role: str, text: str, suggestions: List[s
 async def recommend(req: GoalRequest):
     """ML Content Curation — returns 4 items (3 Videos + 1 Article) for a goal."""
     intent = _analyze_intent(req.goal)
+    user_id = req.user_id or "usr_default"
+    failed_concepts = _get_failed_concepts(user_id)
 
     try:
-        items = await _gemini_recommendations(req.goal)
+        items = await _gemini_recommendations(req.goal, failed_concepts)
         if items:
             return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
-    except Exception:
+    except Exception as e:
+        print(f"[FastAPI] Gemini recommendations error: {e}")
         pass
 
-    items = _static_recommendations(req.goal)
+    items = _static_recommendations(req.goal, failed_concepts)
     return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
 
 
-async def _gemini_recommendations(goal: str) -> List[ContentItem]:
+async def _gemini_recommendations(goal: str, failed_concepts: List[str] = []) -> List[ContentItem]:
+    gap_instruction = ""
+    if failed_concepts:
+        concepts_str = ", ".join(failed_concepts)
+        gap_instruction = f'\nYou are an adaptive learning curator. The user recently struggled with the following concepts: {concepts_str}. You MUST prioritize and generate content cards specifically targeting these exact blind spots before recommending any general content. Tag the returned JSON object with `is_gap_fix: true`.'
+
     prompt = f"""
 You are an expert learning curator AI. A user has stated this goal: "{goal}"
+{gap_instruction}
 
 Return ONLY a valid JSON array with exactly 4 objects. No markdown, no extra text. Each object:
 - "type": either "video" or "article" ONLY
@@ -362,6 +455,7 @@ Return ONLY a valid JSON array with exactly 4 objects. No markdown, no extra tex
 - "duration": e.g. "12 min" or "8 min read"
 - "reason": one sentence starting with "Why: " explaining relevance to the goal
 - "signal_score": integer 90-99
+- "is_gap_fix": boolean (true if this card specifically targets the failed concepts/blind spots, false otherwise)
 
 Rules:
 1. Item 1 = type "video" — foundational full tutorial (10-30 min)
@@ -387,14 +481,18 @@ Return ONLY the JSON array.
             url=item.get("url", ""),
             duration=item.get("duration", ""),
             reason=item.get("reason", ""),
-            signal_score=item.get("signal_score", 95)
+            signal_score=item.get("signal_score", 95),
+            is_gap_fix=item.get("is_gap_fix", False)
         )
         for item in parsed[:4]
     ]
 
 
-def _static_recommendations(goal: str) -> List[ContentItem]:
+def _static_recommendations(goal: str, failed_concepts: List[str] = []) -> List[ContentItem]:
+    is_gap = len(failed_concepts) > 0
+    concepts_str = f" [{', '.join(failed_concepts)}]" if is_gap else ""
     g = goal.lower()
+    
     if any(k in g for k in ["react", "hooks", "frontend", "javascript"]):
         return [
             ContentItem(type="video",   title="React useEffect Full Deep Dive",            youtube_id="SqcY0GlETPk", url="https://www.youtube.com/watch?v=SqcY0GlETPk", duration="14 min",   reason="Why: Covers every edge-case of useEffect memory leaks directly aligned with your goal.", signal_score=98),
@@ -402,6 +500,7 @@ def _static_recommendations(goal: str) -> List[ContentItem]:
             ContentItem(type="video",   title="JavaScript Full Course for Beginners",       youtube_id="PkZNo7MFNFg", url="https://www.youtube.com/watch?v=PkZNo7MFNFg", duration="3.5 hr",  reason="Why: Foundational JS mastery is required to write clean React code.",                  signal_score=96),
             ContentItem(type="article", title="A Complete Guide to useEffect – Overreacted", youtube_id="",           url="https://overreacted.io/a-complete-guide-to-useeffect/", duration="8 min read", reason="Why: The gold standard deep-dive article — foundational mental model.", signal_score=94),
         ]
+        
     if any(k in g for k in ["machine learning", "ml", "neural", "python", "ai", "deep learning"]):
         return [
             ContentItem(type="video",   title="Neural Networks from Scratch – Karpathy",    youtube_id="VMj-3S1tku0", url="https://www.youtube.com/watch?v=VMj-3S1tku0", duration="25 min",   reason="Why: World-class backpropagation walkthrough from Andrej Karpathy.",               signal_score=98),
@@ -409,11 +508,54 @@ def _static_recommendations(goal: str) -> List[ContentItem]:
             ContentItem(type="video",   title="Deep Learning Crash Course – freeCodeCamp",  youtube_id="VyWAvY2CF9c", url="https://www.youtube.com/watch?v=VyWAvY2CF9c", duration="2.8 hr",  reason="Why: Hands-on deep learning with TensorFlow, perfect for your AI goal.",           signal_score=96),
             ContentItem(type="article", title="The Illustrated Transformer – Jay Alammar",  youtube_id="",           url="https://jalammar.github.io/illustrated-transformer/", duration="12 min read", reason="Why: The best single article for understanding attention mechanisms.", signal_score=94),
         ]
+        
     return [
         ContentItem(type="video",   title="Deep Work – Achieve Peak Performance",          youtube_id="gTaJhjQHcf8", url="https://www.youtube.com/watch?v=gTaJhjQHcf8", duration="14 min",  reason="Why: Cal Newport deep work framework — directly boosts ability to reach your goal.", signal_score=98),
         ContentItem(type="video",   title="The Complete Developer Roadmap 2024",           youtube_id="ysEN5RaKOlA", url="https://www.youtube.com/watch?v=ysEN5RaKOlA", duration="18 min",  reason="Why: Structured career path guide — understand what to learn and in which order.",   signal_score=97),
         ContentItem(type="video",   title="Build Projects to Get Hired as a Developer",    youtube_id="QkOCbt_o2HY", url="https://www.youtube.com/watch?v=QkOCbt_o2HY", duration="12 min",  reason="Why: Portfolio-building strategy to convert learning into career outcomes.",         signal_score=96),
         ContentItem(type="article", title="The Feynman Technique – Learn Anything",        youtube_id="",           url="https://fs.blog/feynman-technique/", duration="6 min read", reason="Why: The best learning strategy — explains through teaching to lock in understanding.", signal_score=94),
+=======
+        ContentItem(
+            type="video",
+            title=f"Deep Work – Achieve Peak Performance{concepts_str}",
+            youtube_id="gTaJhjQHcf8",
+            url="https://www.youtube.com/watch?v=gTaJhjQHcf8",
+            duration="14 min",
+            reason=f"Why: Cal Newport deep work framework targeted for your struggle with {', '.join(failed_concepts)}." if is_gap else "Why: Cal Newport deep work framework — directly boosts ability to reach your goal.",
+            signal_score=98,
+            is_gap_fix=is_gap
+        ),
+        ContentItem(
+            type="short",
+            title="The 5-Second Rule in 60 Seconds",
+            youtube_id="k2TaFVANNTg",
+            url="https://www.youtube.com/shorts/k2TaFVANNTg",
+            duration="60 sec",
+            reason="Why: Instant motivation trigger — activates momentum toward your goal.",
+            signal_score=96,
+            is_gap_fix=False
+        ),
+        ContentItem(
+            type="reel",
+            title="Flow State Activation – Get Deep Focus",
+            youtube_id="QkOCbt_o2HY",
+            url="https://www.youtube.com/watch?v=QkOCbt_o2HY",
+            duration="45 sec",
+            reason="Why: Primes your brain for high-yield learning sessions.",
+            signal_score=95,
+            is_gap_fix=False
+        ),
+        ContentItem(
+            type="article",
+            title="The Feynman Technique – Learn Anything",
+            youtube_id="",
+            url="https://fs.blog/feynman-technique/",
+            duration="6 min read",
+            reason=f"Why: Explains through teaching to lock in understanding, targeting your struggle with {', '.join(failed_concepts)}." if is_gap else "Why: The best learning strategy — explains through teaching to lock in understanding.",
+            signal_score=94,
+            is_gap_fix=is_gap
+        ),
+>>>>>>> 309b4388fd54a2157a097f4e024d58ed85f73157
     ]
 
 
@@ -614,6 +756,143 @@ def _analyze_intent(goal: str) -> Dict[str, Any]:
 # 5. USER ASPIRATION / ONBOARDING
 # ═══════════════════════════════════════════════════════════════
 
+def _fallback_assess_goal(baseline: str, aspiration: str, timeframe: str) -> Dict[str, Any]:
+    asp = aspiration.strip()
+    base = baseline.strip()
+    timef = timeframe.strip()
+    
+    asp_lower = asp.lower()
+    if "vlsi" in asp_lower or "hardware" in asp_lower or "design" in asp_lower or "digital" in asp_lower or "architecture" in asp_lower:
+        feed_topics = ["Digital Logic", "Verilog RTL", "FPGA Design", "VLSI Design", "Computer Architecture"]
+        roadmap = [
+            {"phase": "Phase 1: Digital Logic Foundations", "duration": "1 month"},
+            {"phase": "Phase 2: Verilog RTL & Simulation", "duration": "1.5 months"},
+            {"phase": "Phase 3: FPGA Prototyping", "duration": "1.5 months"},
+            {"phase": "Phase 4: Advanced System Architecture", "duration": "2 months"}
+        ]
+    elif "react" in asp_lower or "frontend" in asp_lower or "web" in asp_lower or "javascript" in asp_lower:
+        feed_topics = ["React Hooks", "State Management", "Next.js Framework", "Web Performance", "Component Architecture"]
+        roadmap = [
+            {"phase": "Phase 1: Modern JavaScript & React Basics", "duration": "1 month"},
+            {"phase": "Phase 2: Advanced State & Component Patterns", "duration": "1.5 months"},
+            {"phase": "Phase 3: Next.js & Server Side Rendering", "duration": "1.5 months"},
+            {"phase": "Phase 4: Performance Profiling & Optimization", "duration": "2 months"}
+        ]
+    elif "ml" in asp_lower or "machine learning" in asp_lower or "ai" in asp_lower or "deep learning" in asp_lower or "python" in asp_lower:
+        feed_topics = ["Linear Algebra", "Supervised Learning", "Neural Networks", "Deep Learning", "Transformer Models"]
+        roadmap = [
+            {"phase": "Phase 1: Math & Python Foundations", "duration": "1 month"},
+            {"phase": "Phase 2: Classical Machine Learning Sprints", "duration": "1.5 months"},
+            {"phase": "Phase 3: Deep Learning & PyTorch", "duration": "1.5 months"},
+            {"phase": "Phase 4: Generative AI & LLM Fine-Tuning", "duration": "2 months"}
+        ]
+    else:
+        feed_topics = [f"{asp} Basics", f"{asp} Core Tools", f"{asp} Advanced Concepts", f"{asp} System Design", f"{asp} Optimization"]
+        roadmap = [
+            {"phase": f"Phase 1: {asp} Fundamentals", "duration": "1 month"},
+            {"phase": f"Phase 2: Core {asp} Hands-on Practice", "duration": "1.5 months"},
+            {"phase": f"Phase 3: Advanced {asp} Integration", "duration": "1.5 months"},
+            {"phase": f"Phase 4: {asp} Portfolio & Mastery", "duration": "2 months"}
+        ]
+
+    return {
+        "condition_vector": f"Baseline: {base}",
+        "target_vector": f"Aspiration: {asp} within {timef}",
+        "roadmap": roadmap,
+        "initial_feed_topics": feed_topics
+    }
+
+@app.post("/api/onboarding/assess-goal", response_model=OnboardingAssessResponse)
+async def assess_goal(req: OnboardingAssessRequest):
+    """Post-auth onboarding step: assesses user baseline, goal, and timeframe via Gemini."""
+    user_id = req.user_id or "usr_default"
+    
+    prompt = f"""
+    You are an Agentic Skill Architect. Analyze the user's current baseline, target aspiration, and target timeframe.
+    User Baseline: {req.baseline}
+    User Aspiration: {req.aspiration}
+    User Timeframe: {req.timeframe}
+
+    Generate a structured JSON response containing:
+    1. `condition_vector`: Summary of current baseline (max 15 words).
+    2. `target_vector`: Summary of target goal (max 15 words).
+    3. `roadmap`: An array of 4 sequential milestone phases (e.g., Phase 1: Digital Logic Foundations, Phase 2: Verilog RTL, etc.) with estimated durations.
+    4. `initial_feed_topics`: An array of 5 specific high-signal keywords to seed their initial curated feed.
+
+    Return ONLY a valid JSON object. Do not include markdown backticks (like ```json).
+    Example schema:
+    {{
+      "condition_vector": "First-year CS student with basic C/Python baseline",
+      "target_vector": "VLSI Hardware Design & System Architecture expertise",
+      "roadmap": [
+        {{ "phase": "Phase 1: Digital Logic Foundations", "duration": "1.5 months" }},
+        {{ "phase": "Phase 2: Verilog RTL Design & Simulation", "duration": "1.5 months" }},
+        {{ "phase": "Phase 3: FPGA Prototyping & Verification", "duration": "1.5 months" }},
+        {{ "phase": "Phase 4: Advanced ASIC/VLSI & System Architecture", "duration": "1.5 months" }}
+      ],
+      "initial_feed_topics": ["Digital Logic", "Verilog RTL", "FPGA Design", "VLSI Design", "Computer Architecture"]
+    }}
+    """.strip()
+
+    raw_text = _generate_gemini(prompt)
+    assessment = None
+    if raw_text:
+        try:
+            raw = raw_text.replace("```json", "").replace("```", "").strip()
+            parsed = json.loads(raw)
+            if "condition_vector" in parsed and "roadmap" in parsed:
+                assessment = parsed
+        except Exception as e:
+            print(f"[FastAPI] Gemini onboarding parse error: {e}")
+            
+    if not assessment:
+        assessment = _fallback_assess_goal(req.baseline, req.aspiration, req.timeframe)
+
+    # Persist in memory profiles under the user
+    profile = in_memory_db["user_profiles"].get(user_id)
+    if not profile:
+        profile = {
+            "user_id": user_id,
+            "name": user_id.split("@")[0].title() if "@" in user_id else "Atharva Sur",
+            "role": req.baseline,
+            "aspiration": req.aspiration,
+            "email": user_id if "@" in user_id else "atharva@synapse.ai",
+            "streak": "1-Day Focus Streak",
+            "level": "1",
+            "xp": "0",
+            "focus_time": "0h 0m",
+            "skills_verified": "0 Concepts",
+            "goal_velocity": "0%",
+            "vpm_index": "$0.00/min"
+        }
+    else:
+        profile["role"] = req.baseline
+        profile["aspiration"] = req.aspiration
+        
+    profile["condition_vector"] = assessment["condition_vector"]
+    profile["target_vector"] = assessment["target_vector"]
+    profile["roadmap"] = assessment["roadmap"]
+    profile["initial_feed_topics"] = assessment["initial_feed_topics"]
+    
+    in_memory_db["user_profiles"][user_id] = profile
+
+    if supabase_client:
+        try:
+            supabase_client.from_("profiles").upsert([{
+                "user_id": user_id,
+                "display_name": profile["name"],
+                "role_title": req.baseline
+            }]).execute()
+        except Exception as e:
+            print(f"[FastAPI] Supabase save error: {e}")
+
+    return OnboardingAssessResponse(
+        condition_vector=assessment["condition_vector"],
+        target_vector=assessment["target_vector"],
+        roadmap=[Milestone(phase=m["phase"], duration=m["duration"]) for m in assessment["roadmap"]],
+        initial_feed_topics=assessment["initial_feed_topics"]
+    )
+
 @app.post("/api/aspiration")
 async def save_aspiration(req: AspirationRequest):
     """Store user growth aspiration and target timeline."""
@@ -806,20 +1085,36 @@ async def get_profile(user_id: Optional[str] = "usr_default"):
     """Fetch user VPM & identity profile from FastAPI."""
     profile = in_memory_db["user_profiles"].get(user_id)
     if not profile:
-        profile = {
-            "user_id": user_id,
-            "name": "Atharva Sur",
-            "role": "Growth Catalyst • Tier 3",
-            "aspiration": "Senior AI Architect",
-            "email": "atharva@synapse.ai",
-            "streak": "4-Day Focus Streak",
-            "level": "14",
-            "xp": "3,420",
-            "focus_time": "2h 15m",
-            "skills_verified": "12 Concepts",
-            "goal_velocity": "84%",
-            "vpm_index": "$4.82/min"
-        }
+        if user_id == "usr_default":
+            profile = {
+                "user_id": user_id,
+                "name": "Atharva Sur",
+                "role": "Growth Catalyst • Tier 3",
+                "aspiration": "Senior AI Architect",
+                "email": "atharva@synapse.ai",
+                "streak": "4-Day Focus Streak",
+                "level": "14",
+                "xp": "3,420",
+                "focus_time": "2h 15m",
+                "skills_verified": "12 Concepts",
+                "goal_velocity": "84%",
+                "vpm_index": "$4.82/min"
+            }
+        else:
+            profile = {
+                "user_id": user_id,
+                "name": user_id.split("@")[0].title() if "@" in user_id else "New User",
+                "role": "Growth Aspirant",
+                "aspiration": "",  # Uninitialized!
+                "email": user_id if "@" in user_id else "new_user@synapse.ai",
+                "streak": "0-Day Focus Streak",
+                "level": "1",
+                "xp": "0",
+                "focus_time": "0h 0m",
+                "skills_verified": "0 Concepts",
+                "goal_velocity": "0%",
+                "vpm_index": "$0.00/min"
+            }
     return {"profile": profile}
 
 
@@ -1022,6 +1317,11 @@ async def deep_skill_submit_answer(req: DeepSkillQuizSubmitRequest):
 
     # Update proficiency score for target skill
     skill = req.skill
+    if not is_correct:
+        _add_failed_concept(user_id, skill)
+    else:
+        _remove_failed_concept(user_id, skill)
+
     current_score = state["proficiency_scores"].get(skill, 65)
     score_gain = 4 if is_correct else 1
     new_score = min(100, current_score + score_gain)
@@ -1069,12 +1369,53 @@ def _build_suggestions(prompt: str) -> List[str]:
         return ["View sleep protocol", "Log energy baseline", "Start recovery sprint"]
     return ["Analyse my aspiration gap", "Generate a focus sprint", "Curate 4 resources"]
 
+>>>>>>> 654870efc3019879ce39ba7ea04242b2822dfc1f
 
 @app.get("/")
 async def root():
+    return {"status": "System Online", "message": "FastAPI backend is running."}
+
+# --- 2. The Signup Endpoint (Saves to DB) ---
+@app.post("/signup")
+async def signup(user: UserSignup):
+    try:
+        conn = sqlite3.connect("users.db")
+        cursor = conn.cursor()
+        # Insert the new user into the database
+        # NOTE: In a real production app, you would hash this password! 
+        cursor.execute("INSERT INTO users (name, email, password) VALUES (?, ?, ?)", 
+                       (user.name, user.email, user.password))
+        conn.commit()
+        conn.close()
+        
+        return {
+            "message": "Identity registered successfully",
+            "access_token": f"token_for_{user.email}",
+            "token_type": "bearer"
+        }
+    except sqlite3.IntegrityError:
+        # This triggers if the email is already in the database
+        raise HTTPException(status_code=400, detail="Identity Vector (Email) already registered.")
+
+# --- 3. The Login Endpoint (Reads from DB) ---
+@app.post("/login")
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    # Look up the user by email
+    cursor.execute("SELECT password FROM users WHERE email = ?", (form_data.username,))
+    result = cursor.fetchone()
+    conn.close()
+
+    # Check if user exists AND if the password matches
+    if not result or result[0] != form_data.password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Access Denied: Invalid Identity Vector or Security Key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     return {
-        "status": "Synapse AI FastAPI Backend Engine is running ✅",
-        "gemini": "connected" if gemini_configured else "offline (add GEMINI_API_KEY to backend/.env)",
-        "supabase": "connected" if supabase_client else "offline (using FastAPI in-memory fallback store)",
-        "docs": "http://localhost:8000/docs"
+        "access_token": f"token_for_{form_data.username}", 
+        "token_type": "bearer"
     }

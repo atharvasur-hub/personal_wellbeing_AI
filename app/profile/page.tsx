@@ -81,6 +81,11 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
   const [focusTime, setFocusTime] = useState<string>(() => {
     return getStorageItem('focus_time', '0h 0m');
   });
+  const [focusTimeTrend, setFocusTimeTrend] = useState<string>(() => {
+    const focusSecs = parseInt(getStorageItem('focus_seconds_total', '0'), 10);
+    const defaultTrend = focusSecs === 0 ? '+0.0%' : '+18.4%';
+    return getStorageItem('focus_time_trend', defaultTrend);
+  });
   const [skillsVerified, setSkillsVerified] = useState<string>(() => {
     return getStorageItem('skills_verified', '0 Concepts');
   });
@@ -90,6 +95,45 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
   const [vpmIndex, setVpmIndex] = useState<string>(() => {
     return getStorageItem('vpm_index', '$0.00/min');
   });
+
+  const [roadmap, setRoadmap] = useState<{ phase: string; duration: string }[]>(() => {
+    const saved = getStorageItem('roadmap', '');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      } catch (e) {}
+    }
+    return [
+      { phase: 'Phase 1: Systems Architecture Foundations', duration: '1 month' },
+      { phase: 'Phase 2: Deep Work Endurance & Practice', duration: '1.5 months' },
+      { phase: 'Phase 3: Rust Concurrency Sprints', duration: '1.5 months' },
+      { phase: 'Phase 4: AI Alignment & Safety Auditing', duration: '2 months' }
+    ];
+  });
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      const saved = getStorageItem('roadmap', '');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setRoadmap(parsed);
+          }
+        } catch (e) {}
+      }
+    };
+    handleUpdate();
+    window.addEventListener('aspirationUpdated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('aspirationUpdated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, [currentUser]);
 
   const [pivotNotice, setPivotNotice] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState<boolean>(false);
@@ -106,7 +150,11 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
   useEffect(() => {
     const syncFocusTime = () => {
       const savedTime = getStorageItem('focus_time', '0h 0m');
+      const focusSecs = parseInt(getStorageItem('focus_seconds_total', '0'), 10);
+      const defaultTrend = focusSecs === 0 ? '+0.0%' : '+18.4%';
+      const savedTrend = getStorageItem('focus_time_trend', defaultTrend);
       setFocusTime(savedTime);
+      setFocusTimeTrend(savedTrend);
     };
     syncFocusTime();
     const interval = setInterval(syncFocusTime, 1000);
@@ -358,6 +406,7 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
           <VpmMetricsRow 
             isDarkMode={isDarkMode} 
             focusTime={focusTime}
+            focusTimeTrend={focusTimeTrend}
             skillsVerified={skillsVerified}
             goalVelocity={goalVelocity}
             vpmIndex={vpmIndex}
@@ -372,11 +421,10 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
           {/* 4. Generative "Future Self" Trajectory Simulator */}
           <FutureSelfSimulator isDarkMode={isDarkMode} />
         </div>
-
         {/* Bottom Feature Nodes Matrix & Summary */}
         <div className={`rounded-3xl border p-6 sm:p-8 flex flex-col gap-6 transition-all ${
           isDarkMode 
-            ? 'border-slate-800 bg-slate-900/90' 
+            ? 'border-slate-800 bg-slate-900/90 shadow-slate-950/40' 
             : 'border-stone-200/80 bg-white shadow-sm'
         }`}>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -384,11 +432,11 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
               <h3 className={`text-lg font-black tracking-tight flex items-center gap-2 ${
                 isDarkMode ? 'text-white' : 'text-stone-900'
               }`}>
-                <Brain className="h-5 w-5 text-indigo-600" />
-                Identity Graph Node Weights & Active Recall
+                <Brain className="h-5 w-5 text-indigo-650" />
+                Dynamic Learning Roadmap & Milestones
               </h3>
               <p className={`text-xs mt-0.5 ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
-                Implicit profiling dynamically re-weights learning feeds to optimize for human potential.
+                Google Gemini assessed curriculum mapping your baseline background to target career aspirations.
               </p>
             </div>
             <span className={`px-3 py-1 rounded-full text-xs font-mono font-bold border ${
@@ -396,66 +444,65 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
                 ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20' 
                 : 'bg-indigo-50 text-indigo-700 border-indigo-200'
             }`}>
-              6 Active Nodes Configured
+              {roadmap.length} Milestones Configured
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[
-              { name: 'Systems Architecture', level: 'Level 8/10', category: 'Core Mastery', color: 'from-indigo-500 to-violet-500', progress: 85 },
-              { name: 'Deep Work Endurance', level: 'Level 7/10', category: 'Cognitive Capacity', color: 'from-emerald-500 to-teal-500', progress: 70 },
-              { name: 'Rust Concurrency', level: 'Level 6/10', category: 'Technical Systems', color: 'from-amber-500 to-orange-500', progress: 60 },
-              { name: 'Product Management', level: 'Level 9/10 (Elevated)', category: 'Strategic Execution', color: 'from-teal-500 to-cyan-500', progress: 92 },
-              { name: 'AI Alignment & Safety', level: 'Level 8/10', category: 'Emerging Tech', color: 'from-violet-500 to-purple-500', progress: 78 },
-              { name: 'Public Speaking', level: 'Level 5/10', category: 'Soft Skill', color: 'from-rose-500 to-pink-500', progress: 55 },
-            ].map((node, i) => (
-              <div key={i} className={`rounded-2xl p-4 border flex flex-col gap-3 justify-between ${
-                isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-stone-50 border-stone-200/80'
-              }`}>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <span className={`text-[10px] font-mono font-bold uppercase tracking-wider block ${
-                      isDarkMode ? 'text-slate-400' : 'text-stone-500'
-                    }`}>{node.category}</span>
-                    <h4 className={`text-sm font-bold mt-0.5 ${
-                      isDarkMode ? 'text-white' : 'text-stone-900'
-                    }`}>{node.name}</h4>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <span className="text-xs font-mono font-bold text-indigo-600">{node.level}</span>
-                    <button
-                      onClick={() => {
-                        const key = currentUser?.id ? `synapse_user_${currentUser.id}_skipped_accepted_task` : 'synapse_skipped_accepted_task';
-                        const data = {
-                          skippedTopic: node.name,
-                          engagedTopic: 'Product Management',
-                          duration: '2 weeks'
-                        };
-                        localStorage.setItem(key, JSON.stringify(data));
-                        localStorage.setItem('synapse_skipped_accepted_task', JSON.stringify(data));
-                        window.dispatchEvent(new Event('synapse_skipped_task_updated'));
-                      }}
-                      className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border transition cursor-pointer ${
-                        isDarkMode 
-                          ? 'border-slate-700 bg-slate-900 text-slate-400 hover:text-rose-400 hover:border-rose-500/40' 
-                          : 'border-stone-200 bg-stone-100 text-stone-500 hover:text-rose-600 hover:border-rose-300'
-                      }`}
-                      title="Skip accepted task to test pivot alert"
-                    >
-                      Skip Task
-                    </button>
-                  </div>
-                </div>
-                <div className={`w-full h-2 rounded-full overflow-hidden border ${
-                  isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-stone-200 border-stone-300/40'
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {roadmap.map((node, i) => {
+              const colors = [
+                'from-indigo-500 to-violet-500',
+                'from-emerald-500 to-teal-500',
+                'from-amber-500 to-orange-500',
+                'from-pink-500 to-rose-500'
+              ];
+              const gradient = colors[i % colors.length];
+              const progress = [100, 75, 25, 0][i];
+              
+              return (
+                <div key={i} className={`rounded-2xl p-5 border flex flex-col gap-4 justify-between transition-all duration-300 hover:scale-[1.02] shadow-xs hover:shadow-md ${
+                  isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-stone-50 border-stone-200/80'
                 }`}>
-                  <div className={`h-full rounded-full bg-gradient-to-r ${node.color}`} style={{ width: `${node.progress}%` }} />
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[9px] font-mono font-bold uppercase tracking-wider block ${
+                        isDarkMode ? 'text-slate-400' : 'text-stone-500'
+                      }`}>
+                        Milestone 0{i + 1} • {node.duration}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
+                        progress === 100
+                          ? 'bg-emerald-500/10 text-emerald-500'
+                          : progress > 0
+                          ? 'bg-amber-500/10 text-amber-500 animate-pulse'
+                          : isDarkMode ? 'bg-slate-800 text-slate-500' : 'bg-stone-100 text-stone-400'
+                      }`}>
+                        {progress === 100 ? 'Done' : progress > 0 ? 'Active' : 'Locked'}
+                      </span>
+                    </div>
+                    <h4 className={`text-xs font-black mt-2 leading-snug line-clamp-2 ${
+                      isDarkMode ? 'text-white' : 'text-stone-900'
+                    }`}>
+                      {node.phase}
+                    </h4>
+                  </div>
+                  
+                  <div className="flex flex-col gap-1.5 mt-2">
+                    <div className="flex items-center justify-between text-[9px] font-mono">
+                      <span className={isDarkMode ? 'text-slate-500' : 'text-stone-400'}>Phase Complete</span>
+                      <span className="font-bold">{progress}%</span>
+                    </div>
+                    <div className={`w-full h-1.5 rounded-full overflow-hidden border ${
+                      isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-stone-200 border-stone-300/40'
+                    }`}>
+                      <div className={`h-full rounded-full bg-gradient-to-r ${gradient}`} style={{ width: `${progress}%` }} />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
-
       </div>
 
       {/* EDIT PROFILE MODAL */}

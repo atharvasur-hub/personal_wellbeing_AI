@@ -278,7 +278,7 @@ export default function AgenticOnboardingFlow({ isDarkMode = false }) {
   const loadCachedMedia = () => {
     try {
       const cached = JSON.parse(localStorage.getItem('synapse_curated_media') || '[]');
-      // Only use cached media if ALL video/short/reel entries have real YouTube IDs
+      // Only use cached media if ALL video entries have real YouTube IDs
       const isValid = cached.length >= 4 && cached
         .filter(i => i.type !== 'article')
         .every(i => i.youtubeId && i.youtubeId.length > 0 && i.signalScore > 0);
@@ -376,8 +376,9 @@ export default function AgenticOnboardingFlow({ isDarkMode = false }) {
     setStep('curating');
     setCuratingStep(0);
 
-    // Save to Backend API & Supabase
-    saveAspirationToBackend(goalText);
+    // Save to Backend API & Supabase with correct object format
+    const userId = currentUser?.id || 'usr_default';
+    saveAspirationToBackend({ aspiration: goalText, user_id: userId });
     saveUserAspirationToSupabase({
       primary_goal: goalText,
       current_mood: 'focused',
@@ -395,6 +396,7 @@ export default function AgenticOnboardingFlow({ isDarkMode = false }) {
       localStorage.setItem('synapse_user_roadmap', JSON.stringify(roadmapData.nodes));
     }
     window.dispatchEvent(new Event('synapse_roadmap_updated'));
+    window.dispatchEvent(new Event('aspirationUpdated'));
 
     setRecommendations(recs);
     // Cache media in localStorage for future loads
