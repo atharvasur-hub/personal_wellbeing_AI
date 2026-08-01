@@ -1,1 +1,3 @@
-/* Custom App overrides (can be left blank as styling is handled via index.css/Tailwind) */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
