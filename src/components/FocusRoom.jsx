@@ -19,10 +19,10 @@ import {
 import { saveHabitSteeringLogToSupabase } from '../lib/supabaseClient';
 
 export default function FocusRoom({ isDarkMode = false }) {
-  // Focus Room States
-  const [selectedDurationMins, setSelectedDurationMins] = useState(25);
-  const [customMinsInput, setCustomMinsInput] = useState('');
-  const [focusTask, setFocusTask] = useState('Master React Hooks & useEffect Memory Leak Audit');
+  // Manual Time Input States (Hours & Minutes)
+  const [inputHours, setInputHours] = useState(0);
+  const [inputMinutes, setInputMinutes] = useState(25);
+  const [focusTask, setFocusTask] = useState('Master React Hooks & Memory Leak Audit');
   
   // Timer States
   const [isActive, setIsActive] = useState(false);
@@ -50,7 +50,6 @@ export default function FocusRoom({ isDarkMode = false }) {
       setIsActive(false);
       setIsCompleted(true);
       
-      // Save completed focus session to Supabase
       saveHabitSteeringLogToSupabase({
         intercept_trigger: 'focus_sprint_complete',
         time_saved_minutes: Math.round(totalSeconds / 60),
@@ -66,7 +65,7 @@ export default function FocusRoom({ isDarkMode = false }) {
     const handleBeforeUnload = (e) => {
       if (isActive && secondsLeft > 0) {
         e.preventDefault();
-        e.returnValue = "Focus Session in Progress! Closing this site will forfeit your focus streak.";
+        e.returnValue = "Focus Lock Active! You cannot close the website during a focus session.";
         return e.returnValue;
       }
     };
@@ -75,7 +74,42 @@ export default function FocusRoom({ isDarkMode = false }) {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isActive, secondsLeft]);
 
-  // 3. BLOCK TAB SWITCHING & OPENING OTHER APPS (Page Visibility API)
+  // 3. STRICT ESCAPE KEY INTERCEPT (Prevent Esc Key Exit)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (isActive && !isCompleted && e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setDistractionCount(prev => prev + 1);
+        setShowDistractionShield(true);
+        
+        // Re-enforce fullscreen if exited
+        if (containerRef.current && !document.fullscreenElement) {
+          containerRef.current.requestFullscreen().catch(() => {});
+        }
+      }
+    };
+
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement && isActive && !isCompleted) {
+        setDistractionCount(prev => prev + 1);
+        setShowDistractionShield(true);
+        if (containerRef.current) {
+          containerRef.current.requestFullscreen().catch(() => {});
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown, true);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, [isActive, isCompleted]);
+
+  // 4. BLOCK TAB SWITCHING & OTHER APPS (Page Visibility API)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden && isActive && !isCompleted) {
@@ -88,52 +122,52 @@ export default function FocusRoom({ isDarkMode = false }) {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [isActive, isCompleted]);
 
-  // FULLSCREEN TOGGLE
-  const toggleFullscreen = () => {
-    if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
-    } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
-    }
-  };
-
-  // START FOCUS SESSION
+  // START MANUAL FOCUS SESSION
   const handleStartFocus = (e) => {
     if (e) e.preventDefault();
-    const mins = parseInt(customMinsInput) || selectedDurationMins;
-    const secs = mins * 60;
-    
-    setTotalSeconds(secs);
-    setSecondsLeft(secs);
+    const hrs = parseInt(inputHours) || 0;
+    const mins = parseInt(inputMinutes) || 0;
+    const totalSecs = (hrs * 3600) + (mins * 60);
+
+    if (totalSecs <= 0) {
+      alert("Please enter a valid time duration greater than 0 minutes.");
+      return;
+    }
+
+    setTotalSeconds(totalSecs);
+    setSecondsLeft(totalSecs);
     setIsActive(true);
     setIsPaused(false);
     setIsCompleted(false);
     setDistractionCount(0);
     setShowDistractionShield(false);
 
-    // Optional: Enter fullscreen on start
+    // Enter strict full-screen mode on start
     if (containerRef.current && !document.fullscreenElement) {
       containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
     }
   };
 
-  // STOP / RESET FOCUS SESSION
+  // RESET FOCUS SESSION
   const handleResetFocus = () => {
     setIsActive(false);
     setIsPaused(false);
     setIsCompleted(false);
-    setSecondsLeft(selectedDurationMins * 60);
     setShowDistractionShield(false);
     if (document.fullscreenElement) {
       document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
     }
   };
 
-  // TIME FORMATTING (MM:SS)
+  // TIME FORMATTING (HH:MM:SS)
   const formatTime = (secs) => {
-    const m = Math.floor(secs / 60);
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
     const s = secs % 60;
+
+    if (h > 0) {
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
@@ -147,7 +181,7 @@ export default function FocusRoom({ isDarkMode = false }) {
       }`}
     >
       
-      {/* SELECTION STATE (BEFORE TIMER STARTS) */}
+      {/* MANUAL TIME SELECTION FORM (NO PRESET BUTTONS) */}
       {!isActive && !isCompleted && (
         <div className={`rounded-[2rem] p-8 md:p-12 border shadow-2xl backdrop-blur-xl animate-fade-in flex flex-col gap-8 ${
           isDarkMode ? 'bg-slate-900/90 border-slate-800 text-slate-100' : 'bg-white/80 border-stone-100 text-stone-900'
@@ -162,13 +196,13 @@ export default function FocusRoom({ isDarkMode = false }) {
               </div>
               <div>
                 <span className="text-[10px] font-extrabold tracking-widest font-mono uppercase text-teal-500 block">
-                  FOCUS LOCK CHAMBER
+                  MANUAL TIME PICKER CHAMBER
                 </span>
-                <h2 className="text-2xl font-black tracking-tight">Configure Deep Work Sprint</h2>
+                <h2 className="text-2xl font-black tracking-tight">Set Focus Duration Manually</h2>
               </div>
             </div>
             <p className={`text-xs leading-relaxed max-w-xl ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
-              Select your focus duration. Once locked, tab switching and closing the site will be strictly intercepted by the Digital Guardian.
+              Input your exact target hours and minutes. Once locked, the Escape key, tab switching, and closing the site will be strictly blocked.
             </p>
           </div>
 
@@ -190,56 +224,46 @@ export default function FocusRoom({ isDarkMode = false }) {
             />
           </div>
 
-          {/* Preset Duration Buttons */}
+          {/* MANUAL CLOCK INPUT SELECTOR (HOURS & MINUTES) */}
           <div className="flex flex-col gap-3">
             <label className="text-xs font-extrabold uppercase font-mono tracking-wider text-stone-400">
-              Select Focus Duration (Minutes)
+              Set Target Focus Time
             </label>
-            
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {[
-                { mins: 5, label: '5 Mins', tag: 'Micro Refresher' },
-                { mins: 15, label: '15 Mins', tag: 'Quick Sprint' },
-                { mins: 25, label: '25 Mins', tag: 'Pomodoro Standard' },
-                { mins: 45, label: '45 Mins', tag: 'Deep Flow Block' }
-              ].map((item) => (
-                <button
-                  key={item.mins}
-                  type="button"
-                  onClick={() => { setSelectedDurationMins(item.mins); setCustomMinsInput(''); }}
-                  className={`p-4 rounded-2xl border text-left transition flex flex-col justify-between gap-2 cursor-pointer ${
-                    selectedDurationMins === item.mins && !customMinsInput
-                      ? isDarkMode 
-                        ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20' 
-                        : 'bg-teal-500 border-teal-400 text-white shadow-lg shadow-teal-500/20'
-                      : isDarkMode 
-                        ? 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800' 
-                        : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
-                  }`}
-                >
-                  <span className="text-base font-black">{item.label}</span>
-                  <span className="text-[10px] font-mono opacity-80">{item.tag}</span>
-                </button>
-              ))}
-            </div>
 
-            {/* Custom Minutes Input */}
-            <div className="flex items-center gap-3 mt-2">
-              <span className="text-xs font-bold text-stone-400">Or Custom Minutes:</span>
-              <input
-                type="number"
-                min="1"
-                max="180"
-                value={customMinsInput}
-                onChange={(e) => {
-                  setCustomMinsInput(e.target.value);
-                  if (e.target.value) setSelectedDurationMins(parseInt(e.target.value));
-                }}
-                placeholder="e.g. 60"
-                className={`w-24 border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none ${
-                  isDarkMode ? 'bg-slate-950 border-slate-800 text-white' : 'bg-stone-50 border-stone-200 text-stone-800'
-                }`}
-              />
+            <div className={`p-6 rounded-3xl border flex items-center justify-center gap-6 ${
+              isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-stone-50 border-stone-200/80'
+            }`}>
+              {/* Hours Input */}
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-[10px] font-mono font-bold uppercase text-stone-400">HOURS</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="23"
+                  value={inputHours}
+                  onChange={(e) => setInputHours(Math.max(0, parseInt(e.target.value) || 0))}
+                  className={`w-24 text-center text-3xl font-black font-mono border rounded-2xl py-3 focus:outline-none ${
+                    isDarkMode ? 'bg-slate-900 border-indigo-500/40 text-indigo-300' : 'bg-white border-teal-200 text-teal-700'
+                  }`}
+                />
+              </div>
+
+              <span className="text-3xl font-black font-mono text-stone-400 mt-4">:</span>
+
+              {/* Minutes Input */}
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-[10px] font-mono font-bold uppercase text-stone-400">MINUTES</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={inputMinutes}
+                  onChange={(e) => setInputMinutes(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))}
+                  className={`w-24 text-center text-3xl font-black font-mono border rounded-2xl py-3 focus:outline-none ${
+                    isDarkMode ? 'bg-slate-900 border-indigo-500/40 text-indigo-300' : 'bg-white border-teal-200 text-teal-700'
+                  }`}
+                />
+              </div>
             </div>
           </div>
 
@@ -253,7 +277,7 @@ export default function FocusRoom({ isDarkMode = false }) {
             }`}
           >
             <Lock className="w-5 h-5" />
-            <span>Lock Focus Chamber & Start Timer</span>
+            <span>Lock Focus Chamber ({inputHours}h {inputMinutes}m)</span>
           </button>
         </div>
       )}
@@ -270,7 +294,7 @@ export default function FocusRoom({ isDarkMode = false }) {
           <div className="flex items-center justify-between w-full pb-4 border-b border-stone-200/40">
             <div className="flex items-center gap-2 text-xs font-mono font-bold text-emerald-500">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-              <span>FOCUS LOCK ACTIVE • ANTI-CLOSING SHIELD ON</span>
+              <span>STRICT FOCUS LOCK • ESCAPE KEY BLOCKED</span>
             </div>
 
             <div className="flex items-center gap-2">
@@ -286,16 +310,6 @@ export default function FocusRoom({ isDarkMode = false }) {
                 {ambientAudioActive ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
                 <span className="hidden sm:inline">40Hz Binaural</span>
               </button>
-
-              <button
-                onClick={toggleFullscreen}
-                className={`p-2 rounded-xl border text-xs font-bold transition cursor-pointer ${
-                  isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-300' : 'bg-stone-100 border-stone-200 text-stone-700'
-                }`}
-                title="Toggle Fullscreen"
-              >
-                {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-              </button>
             </div>
           </div>
 
@@ -305,7 +319,7 @@ export default function FocusRoom({ isDarkMode = false }) {
             <h3 className="text-base font-extrabold line-clamp-1">{focusTask}</h3>
           </div>
 
-          {/* Giant Countdown Clock & Progress Circle */}
+          {/* Countdown Clock & Progress Circle */}
           <div className="relative my-4 flex items-center justify-center">
             <svg className="w-72 h-72 transform -rotate-90">
               <circle
@@ -334,7 +348,7 @@ export default function FocusRoom({ isDarkMode = false }) {
             </svg>
 
             <div className="absolute flex flex-col items-center justify-center">
-              <span className="text-6xl md:text-7xl font-black font-mono tracking-tighter">
+              <span className="text-5xl md:text-6xl font-black font-mono tracking-tighter">
                 {formatTime(secondsLeft)}
               </span>
               <span className="text-xs font-mono font-bold text-stone-400 mt-2">
@@ -347,7 +361,7 @@ export default function FocusRoom({ isDarkMode = false }) {
           {distractionCount > 0 && (
             <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs font-mono font-bold flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 shrink-0" />
-              <span>Tab-switch Intercepts Logged: {distractionCount}</span>
+              <span>Esc / Tab-switch Intercepts Logged: {distractionCount}</span>
             </div>
           )}
 
@@ -391,29 +405,8 @@ export default function FocusRoom({ isDarkMode = false }) {
             </span>
             <h2 className="text-3xl font-black">Sprint Completed!</h2>
             <p className={`text-xs max-w-md ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
-              You maintained unbroken focus for {Math.round(totalSeconds / 60)} minutes. Your synaptic growth XP has been updated.
+              You maintained unbroken focus for {Math.round(totalSeconds / 60)} minutes.
             </p>
-          </div>
-
-          <div className="flex items-center gap-4 my-2">
-            <div className={`p-4 rounded-2xl border text-center ${
-              isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-stone-50 border-stone-200'
-            }`}>
-              <span className="text-[10px] font-mono text-stone-400 font-bold block">XP EARNED</span>
-              <span className="text-xl font-black text-amber-500 flex items-center justify-center gap-1">
-                <Flame className="w-5 h-5 fill-current" />
-                +{Math.round(totalSeconds / 60) * 10} XP
-              </span>
-            </div>
-
-            <div className={`p-4 rounded-2xl border text-center ${
-              isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-stone-50 border-stone-200'
-            }`}>
-              <span className="text-[10px] font-mono text-stone-400 font-bold block">DISTRACTIONS</span>
-              <span className="text-xl font-black text-emerald-500">
-                {distractionCount} Logged
-              </span>
-            </div>
           </div>
 
           <button
@@ -425,19 +418,24 @@ export default function FocusRoom({ isDarkMode = false }) {
         </div>
       )}
 
-      {/* ANTI-TAB SWITCH INTERCEPT SHIELD MODAL */}
+      {/* ANTI-ESCAPE / DISTRACTION SHIELD MODAL */}
       {showDistractionShield && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in text-white text-center">
           <div className="max-w-md p-8 rounded-3xl border border-amber-500/30 bg-slate-900 shadow-2xl flex flex-col items-center justify-center gap-4">
             <div className="w-14 h-14 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center">
               <ShieldAlert className="w-8 h-8 animate-pulse" />
             </div>
-            <h3 className="text-xl font-black text-amber-400">FOCUS LOCK INTERCEPT</h3>
+            <h3 className="text-xl font-black text-amber-400">ESCAPE KEY BLOCKED</h3>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Digital Guardian detected tab switching or opening other apps. Return to your active sprint to preserve your focus streak!
+              Focus Lock is active! Pressing the Escape key or switching tabs is intercepted to keep you in your flow state.
             </p>
             <button
-              onClick={() => setShowDistractionShield(false)}
+              onClick={() => {
+                setShowDistractionShield(false);
+                if (containerRef.current && !document.fullscreenElement) {
+                  containerRef.current.requestFullscreen().catch(() => {});
+                }
+              }}
               className="w-full py-3.5 rounded-2xl bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-md hover:bg-amber-400 transition cursor-pointer"
             >
               Resume Focus Sprint
