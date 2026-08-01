@@ -262,6 +262,22 @@ class OnboardingRequest(BaseModel):
     skills: List[str] = []
     condition: Optional[str] = "Deep Skill Focus"
 
+class Milestone(BaseModel):
+    phase: str
+    duration: str
+
+class OnboardingAssessRequest(BaseModel):
+    baseline: str
+    aspiration: str
+    timeframe: str
+    user_id: Optional[str] = "usr_default"
+
+class OnboardingAssessResponse(BaseModel):
+    condition_vector: str
+    target_vector: str
+    roadmap: List[Milestone]
+    initial_feed_topics: List[str]
+
 class RoadmapRequest(BaseModel):
     aspiration: str
     user_id: Optional[str] = "usr_default"
@@ -806,6 +822,143 @@ def _analyze_intent(goal: str) -> Dict[str, Any]:
 # 5. USER ASPIRATION / ONBOARDING
 # ═══════════════════════════════════════════════════════════════
 
+def _fallback_assess_goal(baseline: str, aspiration: str, timeframe: str) -> Dict[str, Any]:
+    asp = aspiration.strip()
+    base = baseline.strip()
+    timef = timeframe.strip()
+    
+    asp_lower = asp.lower()
+    if "vlsi" in asp_lower or "hardware" in asp_lower or "design" in asp_lower or "digital" in asp_lower or "architecture" in asp_lower:
+        feed_topics = ["Digital Logic", "Verilog RTL", "FPGA Design", "VLSI Design", "Computer Architecture"]
+        roadmap = [
+            {"phase": "Phase 1: Digital Logic Foundations", "duration": "1 month"},
+            {"phase": "Phase 2: Verilog RTL & Simulation", "duration": "1.5 months"},
+            {"phase": "Phase 3: FPGA Prototyping", "duration": "1.5 months"},
+            {"phase": "Phase 4: Advanced System Architecture", "duration": "2 months"}
+        ]
+    elif "react" in asp_lower or "frontend" in asp_lower or "web" in asp_lower or "javascript" in asp_lower:
+        feed_topics = ["React Hooks", "State Management", "Next.js Framework", "Web Performance", "Component Architecture"]
+        roadmap = [
+            {"phase": "Phase 1: Modern JavaScript & React Basics", "duration": "1 month"},
+            {"phase": "Phase 2: Advanced State & Component Patterns", "duration": "1.5 months"},
+            {"phase": "Phase 3: Next.js & Server Side Rendering", "duration": "1.5 months"},
+            {"phase": "Phase 4: Performance Profiling & Optimization", "duration": "2 months"}
+        ]
+    elif "ml" in asp_lower or "machine learning" in asp_lower or "ai" in asp_lower or "deep learning" in asp_lower or "python" in asp_lower:
+        feed_topics = ["Linear Algebra", "Supervised Learning", "Neural Networks", "Deep Learning", "Transformer Models"]
+        roadmap = [
+            {"phase": "Phase 1: Math & Python Foundations", "duration": "1 month"},
+            {"phase": "Phase 2: Classical Machine Learning Sprints", "duration": "1.5 months"},
+            {"phase": "Phase 3: Deep Learning & PyTorch", "duration": "1.5 months"},
+            {"phase": "Phase 4: Generative AI & LLM Fine-Tuning", "duration": "2 months"}
+        ]
+    else:
+        feed_topics = [f"{asp} Basics", f"{asp} Core Tools", f"{asp} Advanced Concepts", f"{asp} System Design", f"{asp} Optimization"]
+        roadmap = [
+            {"phase": f"Phase 1: {asp} Fundamentals", "duration": "1 month"},
+            {"phase": f"Phase 2: Core {asp} Hands-on Practice", "duration": "1.5 months"},
+            {"phase": f"Phase 3: Advanced {asp} Integration", "duration": "1.5 months"},
+            {"phase": f"Phase 4: {asp} Portfolio & Mastery", "duration": "2 months"}
+        ]
+
+    return {
+        "condition_vector": f"Baseline: {base}",
+        "target_vector": f"Aspiration: {asp} within {timef}",
+        "roadmap": roadmap,
+        "initial_feed_topics": feed_topics
+    }
+
+@app.post("/api/onboarding/assess-goal", response_model=OnboardingAssessResponse)
+async def assess_goal(req: OnboardingAssessRequest):
+    """Post-auth onboarding step: assesses user baseline, goal, and timeframe via Gemini."""
+    user_id = req.user_id or "usr_default"
+    
+    prompt = f"""
+    You are an Agentic Skill Architect. Analyze the user's current baseline, target aspiration, and target timeframe.
+    User Baseline: {req.baseline}
+    User Aspiration: {req.aspiration}
+    User Timeframe: {req.timeframe}
+
+    Generate a structured JSON response containing:
+    1. `condition_vector`: Summary of current baseline (max 15 words).
+    2. `target_vector`: Summary of target goal (max 15 words).
+    3. `roadmap`: An array of 4 sequential milestone phases (e.g., Phase 1: Digital Logic Foundations, Phase 2: Verilog RTL, etc.) with estimated durations.
+    4. `initial_feed_topics`: An array of 5 specific high-signal keywords to seed their initial curated feed.
+
+    Return ONLY a valid JSON object. Do not include markdown backticks (like ```json).
+    Example schema:
+    {{
+      "condition_vector": "First-year CS student with basic C/Python baseline",
+      "target_vector": "VLSI Hardware Design & System Architecture expertise",
+      "roadmap": [
+        {{ "phase": "Phase 1: Digital Logic Foundations", "duration": "1.5 months" }},
+        {{ "phase": "Phase 2: Verilog RTL Design & Simulation", "duration": "1.5 months" }},
+        {{ "phase": "Phase 3: FPGA Prototyping & Verification", "duration": "1.5 months" }},
+        {{ "phase": "Phase 4: Advanced ASIC/VLSI & System Architecture", "duration": "1.5 months" }}
+      ],
+      "initial_feed_topics": ["Digital Logic", "Verilog RTL", "FPGA Design", "VLSI Design", "Computer Architecture"]
+    }}
+    """.strip()
+
+    raw_text = _generate_gemini(prompt)
+    assessment = None
+    if raw_text:
+        try:
+            raw = raw_text.replace("```json", "").replace("```", "").strip()
+            parsed = json.loads(raw)
+            if "condition_vector" in parsed and "roadmap" in parsed:
+                assessment = parsed
+        except Exception as e:
+            print(f"[FastAPI] Gemini onboarding parse error: {e}")
+            
+    if not assessment:
+        assessment = _fallback_assess_goal(req.baseline, req.aspiration, req.timeframe)
+
+    # Persist in memory profiles under the user
+    profile = in_memory_db["user_profiles"].get(user_id)
+    if not profile:
+        profile = {
+            "user_id": user_id,
+            "name": user_id.split("@")[0].title() if "@" in user_id else "Atharva Sur",
+            "role": req.baseline,
+            "aspiration": req.aspiration,
+            "email": user_id if "@" in user_id else "atharva@synapse.ai",
+            "streak": "1-Day Focus Streak",
+            "level": "1",
+            "xp": "0",
+            "focus_time": "0h 0m",
+            "skills_verified": "0 Concepts",
+            "goal_velocity": "0%",
+            "vpm_index": "$0.00/min"
+        }
+    else:
+        profile["role"] = req.baseline
+        profile["aspiration"] = req.aspiration
+        
+    profile["condition_vector"] = assessment["condition_vector"]
+    profile["target_vector"] = assessment["target_vector"]
+    profile["roadmap"] = assessment["roadmap"]
+    profile["initial_feed_topics"] = assessment["initial_feed_topics"]
+    
+    in_memory_db["user_profiles"][user_id] = profile
+
+    if supabase_client:
+        try:
+            supabase_client.from_("profiles").upsert([{
+                "user_id": user_id,
+                "display_name": profile["name"],
+                "role_title": req.baseline
+            }]).execute()
+        except Exception as e:
+            print(f"[FastAPI] Supabase save error: {e}")
+
+    return OnboardingAssessResponse(
+        condition_vector=assessment["condition_vector"],
+        target_vector=assessment["target_vector"],
+        roadmap=[Milestone(phase=m["phase"], duration=m["duration"]) for m in assessment["roadmap"]],
+        initial_feed_topics=assessment["initial_feed_topics"]
+    )
+
 @app.post("/api/aspiration")
 async def save_aspiration(req: AspirationRequest):
     """Store user growth aspiration and target timeline."""
@@ -998,20 +1151,36 @@ async def get_profile(user_id: Optional[str] = "usr_default"):
     """Fetch user VPM & identity profile from FastAPI."""
     profile = in_memory_db["user_profiles"].get(user_id)
     if not profile:
-        profile = {
-            "user_id": user_id,
-            "name": "Atharva Sur",
-            "role": "Growth Catalyst • Tier 3",
-            "aspiration": "Senior AI Architect",
-            "email": "atharva@synapse.ai",
-            "streak": "4-Day Focus Streak",
-            "level": "14",
-            "xp": "3,420",
-            "focus_time": "2h 15m",
-            "skills_verified": "12 Concepts",
-            "goal_velocity": "84%",
-            "vpm_index": "$4.82/min"
-        }
+        if user_id == "usr_default":
+            profile = {
+                "user_id": user_id,
+                "name": "Atharva Sur",
+                "role": "Growth Catalyst • Tier 3",
+                "aspiration": "Senior AI Architect",
+                "email": "atharva@synapse.ai",
+                "streak": "4-Day Focus Streak",
+                "level": "14",
+                "xp": "3,420",
+                "focus_time": "2h 15m",
+                "skills_verified": "12 Concepts",
+                "goal_velocity": "84%",
+                "vpm_index": "$4.82/min"
+            }
+        else:
+            profile = {
+                "user_id": user_id,
+                "name": user_id.split("@")[0].title() if "@" in user_id else "New User",
+                "role": "Growth Aspirant",
+                "aspiration": "",  # Uninitialized!
+                "email": user_id if "@" in user_id else "new_user@synapse.ai",
+                "streak": "0-Day Focus Streak",
+                "level": "1",
+                "xp": "0",
+                "focus_time": "0h 0m",
+                "skills_verified": "0 Concepts",
+                "goal_velocity": "0%",
+                "vpm_index": "$0.00/min"
+            }
     return {"profile": profile}
 
 

@@ -23,6 +23,17 @@ export default function CuratedFeed({ isDarkMode = false, currentUser = null }) 
 
   // Get goal text dynamically from localStorage
   const getGoalText = () => {
+    const topicsStr = localStorage.getItem('synapse_user_feed_topics');
+    if (topicsStr) {
+      try {
+        const topics = JSON.parse(topicsStr);
+        if (Array.isArray(topics) && topics.length > 0) {
+          return `Topics: ${topics.join(', ')}`;
+        }
+      } catch (e) {
+        console.warn('Failed to parse feed topics:', e);
+      }
+    }
     return localStorage.getItem('synapse_user_aspiration') || 
            localStorage.getItem('aspiration') || 
            'React & Frontend Mastery';
@@ -70,6 +81,7 @@ export default function CuratedFeed({ isDarkMode = false, currentUser = null }) 
 
     window.addEventListener('storage', handleUpdate);
     window.addEventListener('aspirationUpdated', handleUpdate);
+    window.addEventListener('feedTopicsUpdated', handleUpdate);
     window.addEventListener('quizSubmitted', handleUpdate);
 
     return () => {
@@ -77,6 +89,7 @@ export default function CuratedFeed({ isDarkMode = false, currentUser = null }) 
       clearInterval(pollInterval);
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('aspirationUpdated', handleUpdate);
+      window.removeEventListener('feedTopicsUpdated', handleUpdate);
       window.removeEventListener('quizSubmitted', handleUpdate);
     };
   }, [userId]);

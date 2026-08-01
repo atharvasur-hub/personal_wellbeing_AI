@@ -124,6 +124,15 @@ export async function getAspirationsFromBackend(userId = 'usr_default') {
   return apiGet(`/api/aspiration?user_id=${encodeURIComponent(userId)}`);
 }
 
+export async function assessGoalWithAI(baseline, aspiration, timeframe, userId = 'usr_default') {
+  return apiFetch('/api/onboarding/assess-goal', {
+    baseline,
+    aspiration,
+    timeframe,
+    user_id: userId
+  });
+}
+
 // ── PILLAR 6: Focus Room Sessions ─────────────────────────────
 export async function saveFocusSessionToBackend(sessionData) {
   return apiFetch('/api/focus-sessions', sessionData);
