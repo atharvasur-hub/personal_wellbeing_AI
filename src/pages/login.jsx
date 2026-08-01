@@ -54,7 +54,7 @@ export default function Login() {
     };
 
     return (
-        <div className="min-h-screen bg-black flex items-center justify-center relative overflow-hidden font-sans">
+        <div className="min-h-screen w-full bg-slate-950 flex items-center justify-center p-4 text-white">
             {/* Background Glowing Orbs */}
             <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-purple-600/30 rounded-full blur-[120px] pointer-events-none" />
             <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-emerald-600/20 rounded-full blur-[120px] pointer-events-none" />
