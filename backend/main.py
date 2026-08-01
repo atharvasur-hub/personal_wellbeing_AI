@@ -58,7 +58,7 @@ def _generate_gemini(prompt: str) -> str:
     if gemini_client:
         try:
             response = gemini_client.models.generate_content(
-                model='gemini-3.1-pro-preview',
+                model='gemini-2.0-flash',
                 contents=prompt,
             )
             if response.text:
@@ -68,7 +68,7 @@ def _generate_gemini(prompt: str) -> str:
 
     # 2. Clean REST API fallback
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key={key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
         payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
         req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -361,11 +361,11 @@ class RoadmapNodeItem(BaseModel):
 # ═══════════════════════════════════════════════════════════════
 
 CHAT_SYSTEM_PROMPT = """
-You are Synapse AI — an elite personal growth and wellbeing AI assistant.
-Your role is to help the user achieve their goals, improve focus, manage habits, and accelerate learning.
-Tone: supportive, precise, motivating, and high-tech.
-Keep responses concise (3-5 sentences max unless the user asks for detail).
-Always tie your advice directly to the user's stated goals and wellbeing.
+You are Synapse AI — an elite personal growth, wellbeing, and coding debugger AI assistant.
+Your role is to help the user achieve their goals, improve focus, manage habits, accelerate learning, and comprehensively SOLVE ALL DOUBTS.
+You are an expert Gemini Debugger: you analyze problems deeply, explain complex concepts clearly, and provide actionable fixes.
+Tone: supportive, precise, motivating, and highly technical.
+Keep responses concise but ensure you fully resolve the user's doubts.
 """.strip()
 
 def _get_user_profile_context(user_id: str) -> str:
@@ -404,6 +404,13 @@ def _get_user_profile_context(user_id: str) -> str:
 
 
 import re
+
+def _build_suggestions(message: str) -> List[str]:
+    return [
+        "Explain this further",
+        "Give me a code example",
+        "How can I debug this?"
+    ]
 
 def _generate_smart_fallback(user_message: str) -> Dict[str, Any]:
     msg = user_message.strip()
