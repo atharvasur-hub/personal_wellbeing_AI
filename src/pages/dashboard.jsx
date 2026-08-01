@@ -1,20 +1,44 @@
-import AiTutor from "./AiTutor";
+import { useEffect, useState } from "react";
+import AppLayout from "../components/AppLayout";
 
 export default function Dashboard() {
-    return (
-        <div style={{ minHeight: "100vh", backgroundColor: "#FAFAFA", padding: "2rem", fontFamily: "sans-serif" }}>
-            <div style={{ maxWidth: "56rem", margin: "0 auto" }}>
+    const [token, setToken] = useState("");
+    const [currentUser, setCurrentUser] = useState(null);
 
-                {/* Dashboard Header */}
-                <div style={{ backgroundColor: "white", padding: "1.5rem", borderRadius: "1rem", border: "1px solid #f3f4f6", marginBottom: "2rem" }}>
-                    <h1 style={{ fontSize: "1.5rem", fontWeight: "extrabold", color: "#111827", margin: 0 }}>Dashboard Workspace</h1>
-                    <p style={{ color: "#059669", fontWeight: "bold", fontSize: "0.75rem", textTransform: "uppercase", marginTop: "0.25rem" }}>● Systems Active</p>
-                </div>
+    useEffect(() => {
+        const savedToken = localStorage.getItem("agentic_token");
+        if (!savedToken) {
+            window.location.href = "/";
+        } else {
+            setToken(savedToken);
+            // Parse token to build the user object
+            // Token format: token_for_email@domain.com
+            const email = savedToken.startsWith("token_for_") 
+                ? savedToken.replace("token_for_", "") 
+                : savedToken;
+            const name = email.split("@")[0].split(".")[0].toUpperCase();
+            setCurrentUser({
+                id: email,
+                email: email,
+                name: name
+            });
+        }
+    }, []);
 
-                {/* Render the AI Tutor Component */}
-                <AiTutor />
+    const handleLogout = () => {
+        localStorage.removeItem("agentic_token");
+        window.location.href = "/";
+    };
 
+    if (!currentUser) {
+        return (
+            <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "#FAFAFA", fontFamily: "sans-serif" }}>
+                <p style={{ color: "#4b5563", fontSize: "0.875rem" }}>Initializing cognitive session...</p>
             </div>
-        </div>
+        );
+    }
+
+    return (
+        <AppLayout currentUser={currentUser} onLogout={handleLogout} />
     );
 }
