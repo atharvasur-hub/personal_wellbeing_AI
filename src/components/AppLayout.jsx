@@ -37,6 +37,7 @@ import {
 import CuratedFeed from './CuratedFeed';
 import AgenticOnboardingFlow from './AgenticOnboardingFlow';
 import HabitSteeringModal from './HabitSteeringModal';
+import FocusRoom from './FocusRoom';
 import { 
   fetchChatHistoryFromSupabase, 
   saveChatMessageToSupabase, 
@@ -716,6 +717,11 @@ export default function AppLayout({ currentUser, onLogout }) {
               </>
             )}
 
+            {/* FOCUS ROOM VIEW */}
+            {activeMenu === 'focus' && (
+              <FocusRoom isDarkMode={isDarkMode} />
+            )}
+
             {/* FULL PROFILE & TRAJECTORY VIEW */}
             {activeMenu === 'profile' && (
               <div className="flex flex-col gap-10">
@@ -1029,12 +1035,12 @@ export default function AppLayout({ currentUser, onLogout }) {
             )}
 
             {/* Other Sections Placeholder */}
-            {(activeMenu === 'focus' || activeMenu === 'journey') && (
+            {activeMenu === 'journey' && (
               <div className={`p-12 text-center border border-dashed rounded-3xl py-24 shadow-xs ${
                 isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-stone-200'
               }`}>
                 <Brain className="w-12 h-12 text-stone-300 mx-auto mb-4 animate-pulse" />
-                <h3 className="text-base font-bold">Section placeholder</h3>
+                <h3 className="text-base font-bold">Journey Map Section</h3>
                 <p className="text-xs text-stone-400 max-w-xs mx-auto mt-2">
                   This mock panel ({activeMenu}) serves as a landing checkpoint for the rest of the workspace modules.
                 </p>
