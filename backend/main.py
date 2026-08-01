@@ -17,21 +17,20 @@ API DOCS:
 """
 
 import os
+import sqlite3
+import json
+import time
+from typing import Optional, List, Dict, Any
+
 try:
     import google.generativeai as genai
 except ImportError:
     genai = None
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import json
-import time
-from typing import Optional, List, Dict, Any
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
-import google.generativeai as genai
 
 # ── Load environment variables ────────────────────────────────
 from dotenv import load_dotenv, find_dotenv
@@ -170,6 +169,10 @@ def init_db():
     """)
     conn.commit()
     conn.close()
+
+@app.on_event("startup")
+def startup_event():
+    init_db()
 
 # ═══════════════════════════════════════════════════════════════
 # PYDANTIC SCHEMAS
