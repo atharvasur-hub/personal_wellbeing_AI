@@ -46,33 +46,59 @@ SUPABASE_URL   = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY   = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_ANON_KEY", "")
 
 # ── Configure Gemini Multi-Model Generator ─────────────────────
+import urllib.request
+
 def _generate_gemini(prompt: str) -> str:
-    """Configures and attempts Gemini API calls across multiple Flash/Pro models."""
-    key = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or "").strip()
+    """Configures and attempts Gemini API calls across multiple Flash/Pro models with REST fallback."""
+    key = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or "").strip().replace('"', '').replace("'", "")
     if not key or key == "YOUR_GEMINI_API_KEY_HERE":
         return ""
-    try:
-        genai.configure(api_key=key)
-        candidate_models = [
-            "gemini-2.5-flash",
-            "gemini-3.6-flash",
-            "gemini-2.0-flash",
-            "gemini-flash-latest",
-            "gemini-2.5-pro",
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro"
-        ]
-        for model_name in candidate_models:
-            try:
-                m = genai.GenerativeModel(model_name)
-                res = m.generate_content(prompt)
-                if res and res.text:
-                    return res.text.strip()
-            except Exception:
-                continue
-    except Exception as e:
-        print(f"[FastAPI] Gemini call exception: {e}")
+
+    candidate_models = [
+        "gemini-2.0-flash",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-flash-latest",
+        "gemini-pro-latest",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "models/gemini-2.0-flash",
+        "models/gemini-2.5-flash"
+    ]
+
+    # 1. Try Google SDK genai
+    if genai:
+        try:
+            genai.configure(api_key=key)
+            for model_name in candidate_models:
+                try:
+                    m = genai.GenerativeModel(model_name)
+                    res = m.generate_content(prompt)
+                    if res and res.text:
+                        return res.text.strip()
+                except Exception as e:
+                    print(f"[FastAPI Gemini SDK] {model_name} error: {e}")
+                    continue
+        except Exception as e:
+            print(f"[FastAPI Gemini SDK Config] error: {e}")
+
+    # 2. Try Direct HTTP REST API endpoint fallback
+    for model_name in ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-flash"]:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={key}"
+            payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
+            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                candidates = data.get("candidates", [])
+                if candidates and "content" in candidates[0]:
+                    parts = candidates[0]["content"].get("parts", [])
+                    if parts and "text" in parts[0]:
+                        return parts[0]["text"].strip()
+        except Exception as e:
+            print(f"[FastAPI Gemini REST] {model_name} REST error: {e}")
+            continue
+
     return ""
 
 gemini_configured = bool(GEMINI_API_KEY)
@@ -379,6 +405,44 @@ def _get_user_profile_context(user_id: str) -> str:
     return context
 
 
+import re
+
+def _generate_smart_fallback(user_message: str) -> Dict[str, Any]:
+    msg = user_message.strip()
+
+    def has_word(word: str) -> bool:
+        return bool(re.search(r'\b' + re.escape(word) + r'\b', msg, re.IGNORECASE))
+
+    if has_word('java') and not has_word('javascript'):
+        return {
+            "text": "☕ **Java Core & Enterprise Architecture:**\n\n```java\n// Object-Oriented Java Fundamentals\npublic class LearningTask {\n    private String title;\n    private boolean completed;\n\n    public LearningTask(String title) {\n        this.title = title;\n        this.completed = false;\n    }\n\n    public static void main(String[] args) {\n        LearningTask task = new LearningTask(\"Master Java OOP & JVM\");\n        System.out.println(task.title);\n    }\n}\n```\n\n1. **OOP Core:** Encapsulation, Inheritance, Polymorphism, Abstraction.\n2. **JVM & Memory:** Heap vs Stack, Garbage Collection tuning.\n3. **Enterprise Stack:** Spring Boot, REST APIs & JPA/Hibernate.",
+            "suggestions": ['Java OOP Concepts', 'Spring Boot Setup', 'JVM Memory Tuning']
+        }
+
+    if any(has_word(w) for w in ['python', 'pip', 'django', 'fastapi', 'flask']):
+        return {
+            "text": "🐍 **Python Backend & Architecture Blueprint:**\n\n```python\nfrom fastapi import FastAPI\nfrom pydantic import BaseModel\n\napp = FastAPI(title=\"Synapse AI API\")\n\nclass SkillGoal(BaseModel):\n    title: str\n    timeframe: str = \"6 months\"\n\n@app.post(\"/api/goal\")\nasync def create_goal(goal: SkillGoal):\n    return {\"status\": \"success\", \"goal\": goal.title}\n```\n\n1. **Async Engine:** `asyncio` event loops & non-blocking I/O.\n2. **Type Safety:** Pydantic models & type annotations.\n3. **ORM & Storage:** Supabase PostgreSQL & Redis caching.",
+            "suggestions": ['FastAPI Setup', 'Async Python', 'Database Schemas']
+        }
+
+    if any(has_word(w) for w in ['react', 'frontend', 'component', 'hook', 'javascript', 'js']):
+        return {
+            "text": "⚡ **React & Modern Web Architecture:**\n\n```jsx\nimport React, { useState } from 'react';\n\nexport default function SkillTracker({ title }) {\n  const [completed, setCompleted] = useState(false);\n  return (\n    <button onClick={() => setCompleted(!completed)}>\n      {title}: {completed ? '✓ Done' : 'In Progress'}\n    </button>\n  );\n}\n```\n\n1. **State Hygiene:** `useState`, `useReducer`, and `useMemo` for render optimization.\n2. **Hooks Lifecycle:** Clean `useEffect` cleanup handlers.\n3. **UI Engine:** Tailwind CSS & Glassmorphic design systems.",
+            "suggestions": ['React Performance', 'Custom Hooks', 'Tailwind Layout']
+        }
+
+    if any(has_word(w) for w in ['ml', 'ai', 'pytorch', 'tensorflow', 'llm', 'rag']):
+        return {
+            "text": "🎯 **AI & Deep Learning Pathway:**\n\n```python\nimport torch\nimport torch.nn as nn\n\nclass ResidualBlock(nn.Module):\n    def __init__(self, channels):\n        super().__init__()\n        self.conv = nn.Conv2d(channels, channels, 3, padding=1)\n    def forward(self, x):\n        return x + self.conv(x)\n```\n\n1. **Foundations:** Tensor linear algebra & Autograd backpropagation.\n2. **Retrieval (RAG):** Vector embeddings, cosine similarity & Pinecone/Supabase vector.\n3. **Model Ops:** Quantization, ONNX export & FastAPI inference endpoints.",
+            "suggestions": ['PyTorch Tutorial', 'RAG Architecture', 'LLM Fine-Tuning']
+        }
+
+    return {
+        "text": f"Greetings! I am your Synapse AI Growth Architect.\n\nRegarding **\"{user_message}\"**:\n\n1. **Target Milestone:** Deconstruct this into core domain concepts and 25-minute practice sprints.\n2. **Focused Execution:** Launch a 25-minute Focus Sprint to make immediate progress.\n3. **Feedback Loop:** Check your Journey Map and Identity Graph to track skill retention.",
+        "suggestions": ['Analyze Aspiration Gap', 'Generate Focus Sprint', 'Open Journey Map']
+    }
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     """Chatbot endpoint — powered by Gemini 2.0 Flash / 1.5 Flash."""
@@ -399,8 +463,9 @@ async def chat(req: ChatRequest):
     reply_text = _generate_gemini(prompt)
 
     if not reply_text:
-        reply_text = "Synapse AI is operating in offline mode. Please add your free GEMINI_API_KEY to backend/.env (GEMINI_API_KEY=AIzaSy...) or root .env to unlock live Gemini responses."
-        suggestions = ["Where do I get a free API key?", "How do I set backend/.env?", "What can Synapse AI do?"]
+        fallback = _generate_smart_fallback(req.message)
+        reply_text = fallback["text"]
+        suggestions = fallback["suggestions"]
     else:
         suggestions = _build_suggestions(req.message)
 
