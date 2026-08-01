@@ -143,7 +143,8 @@ function useMockChat(activeAgent) {
     } catch (err) {
       console.warn('AI Agent request fallback:', err.message);
     }
-    // Speak the response text safely
+    // Speech synthesis temporarily disabled to prevent browser hangs
+    /*
     try {
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
@@ -161,6 +162,7 @@ function useMockChat(activeAgent) {
       console.warn('Speech synthesis non-critical error:', speechErr);
       setIsSpeaking(false);
     }
+    */
 
     const assistantMessageId = Math.random().toString(36).substr(2, 9);
     setMessages(prev => [...prev, {

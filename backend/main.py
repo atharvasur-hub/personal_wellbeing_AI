@@ -57,7 +57,7 @@ def _generate_gemini(prompt: str) -> str:
     if gemini_client:
         try:
             response = gemini_client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-3.1-pro-preview',
                 contents=prompt,
             )
             if response.text:
@@ -67,7 +67,7 @@ def _generate_gemini(prompt: str) -> str:
 
     # 2. Clean REST API fallback
     try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key={key}"
         payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
         req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=10) as resp:
