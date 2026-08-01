@@ -212,3 +212,11 @@ export async function submitDeepSkillQuizAnswer(skill, question, selectedOption,
   return result;
 }
 
+export async function fetchDynamicRoadmapFromBackend(aspiration, topics = [], userId = 'usr_default') {
+  return await apiFetch('/api/roadmap', {
+    user_id: userId,
+    aspiration,
+    topics
+  });
+}
+
