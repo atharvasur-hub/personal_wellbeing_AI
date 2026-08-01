@@ -1,31 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Bot, Send, Sparkles, Play, BookOpen,
-  Brain, RefreshCw, Flame, ExternalLink,
+  Brain, RefreshCw, Flame,
   Film, Loader2, ChevronRight, Check
 } from 'lucide-react';
 import { fetchAIRecommendations } from '../lib/contentRecommender';
-import { saveAspirationToBackend } from '../lib/backendApi';
+import { saveAspirationToBackend, fetchAIRoadmap } from '../lib/backendApi';
 import { saveUserAspirationToSupabase } from '../lib/supabaseClient';
 
-// Media type config
+// Media type config — video and article only
 const MEDIA_CONFIG = {
   video: {
     label: '📹 Video Tutorial',
     badgeBg: isDark => isDark ? 'bg-violet-500/15 border-violet-500/20 text-violet-300' : 'bg-violet-50 border-violet-100 text-violet-700',
     accentColor: 'text-violet-500',
-    embedPrefix: 'https://www.youtube-nocookie.com/embed/'
-  },
-  short: {
-    label: '⚡ Short Clip',
-    badgeBg: isDark => isDark ? 'bg-cyan-500/15 border-cyan-500/20 text-cyan-300' : 'bg-cyan-50 border-cyan-100 text-cyan-700',
-    accentColor: 'text-cyan-500',
-    embedPrefix: 'https://www.youtube-nocookie.com/embed/'
-  },
-  reel: {
-    label: '🔥 Reel Animation',
-    badgeBg: isDark => isDark ? 'bg-rose-500/15 border-rose-500/20 text-rose-300' : 'bg-rose-50 border-rose-100 text-rose-700',
-    accentColor: 'text-rose-500',
     embedPrefix: 'https://www.youtube-nocookie.com/embed/'
   },
   article: {
@@ -36,106 +24,274 @@ const MEDIA_CONFIG = {
   }
 };
 
-const SIGNAL_SCORES = { video: 98, short: 96, reel: 95, article: 94 };
+const SIGNAL_SCORES = { video: 98, article: 94 };
+
+// YouTube Player with auto-fallback when video is unavailable/embedding disabled
+function YouTubePlayer({ videoId, title }) {
+  const [fallback, setFallback] = React.useState(!videoId || videoId.length < 5);
+  const iframeRef = React.useRef(null);
+
+  // Listen for YouTube postMessage errors (100=not found, 101/150=embedding not allowed)
+  React.useEffect(() => {
+    const handler = (event) => {
+      try {
+        if (!event.data) return;
+        const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        // YouTube iframe API sends error events via postMessage
+        if (data?.event === 'infoDelivery' && data?.info?.error) {
+          setFallback(true);
+        }
+        // Also catch the onError event
+        if (data?.event === 'onError') {
+          setFallback(true);
+        }
+      } catch {}
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  const searchQuery = encodeURIComponent(title || 'learn programming');
+
+  if (fallback) {
+    return (
+      <div className="aspect-video w-full bg-black flex flex-col items-center justify-center gap-4 relative overflow-hidden">
+        <iframe
+          className="absolute inset-0 w-full h-full border-0"
+          src={`https://www.youtube.com/embed?listType=search&list=${searchQuery}&autoplay=0`}
+          title={`Search: ${title}`}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="aspect-video w-full bg-black">
+      <iframe
+        ref={iframeRef}
+        className="w-full h-full border-0"
+        src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&enablejsapi=1`}
+        title={title}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowFullScreen
+        onError={() => setFallback(true)}
+      />
+    </div>
+  );
+}
+
+// In-App Media Viewer Modal
+function MediaModal({ item, isDarkMode, onClose }) {
+  const config = MEDIA_CONFIG[item.type] || MEDIA_CONFIG.video;
+  const isVideo = item.type !== 'article';
+
+  // Close on Escape key
+  React.useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+      onClick={onClose}
+    >
+      <div
+        className={`relative w-full max-w-4xl rounded-3xl border shadow-2xl overflow-hidden flex flex-col ${
+          isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-white border-stone-200'
+        }`}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div className={`flex items-center justify-between px-5 py-4 border-b ${isDarkMode ? 'border-slate-800' : 'border-stone-200'}`}>
+          <div className="flex items-center gap-3">
+            <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold font-mono uppercase border ${config.badgeBg(isDarkMode)}`}>
+              {config.label}
+            </span>
+            <h3 className={`text-sm font-extrabold line-clamp-1 ${isDarkMode ? 'text-slate-100' : 'text-stone-900'}`}>
+              {item.title}
+            </h3>
+          </div>
+          <button
+            onClick={onClose}
+            className={`w-8 h-8 rounded-xl flex items-center justify-center transition cursor-pointer text-lg font-bold ${
+              isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-400' : 'bg-stone-100 hover:bg-stone-200 text-stone-600'
+            }`}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Content Area */}
+        {isVideo ? (
+          <YouTubePlayer videoId={item.youtubeId} title={item.title} />
+        ) : (
+          /* Article in-app reader */
+          <div className={`flex flex-col ${isDarkMode ? 'bg-slate-950' : 'bg-stone-50'}`} style={{ height: '60vh' }}>
+            <iframe
+              src={item.url}
+              title={item.title}
+              className="w-full flex-1 border-0"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            />
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className={`px-5 py-3 border-t flex items-center justify-between ${isDarkMode ? 'border-slate-800' : 'border-stone-200'}`}>
+          <div className={`text-[10px] font-mono flex items-start gap-1.5 flex-1 mr-4 ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
+            <Brain className={`w-3 h-3 shrink-0 mt-0.5 ${config.accentColor}`} />
+            <span>{item.reason || 'Curated based on your goal.'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`text-[9px] font-mono font-bold ${config.accentColor}`}>{item.duration}</span>
+            <button
+              onClick={onClose}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition ${
+                isDarkMode ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+              }`}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Individual Media Card
 function MediaCard({ item, index, isDarkMode }) {
   const config = MEDIA_CONFIG[item.type] || MEDIA_CONFIG.video;
   const signalScore = SIGNAL_SCORES[item.type] || 94;
+  const [showModal, setShowModal] = React.useState(false);
+  const isVideo = item.type !== 'article';
 
   return (
-    <div className={`rounded-3xl p-5 border flex flex-col gap-4 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl group ${
-      isDarkMode
-        ? 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
-        : 'bg-white border-stone-200/80 shadow-md hover:shadow-xl'
-    }`}>
-
-      {/* Card Top Bar */}
-      <div className="flex items-center justify-between">
-        <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold font-mono uppercase border flex items-center gap-1 ${config.badgeBg(isDarkMode)}`}>
-          <span>{index + 1}.</span>
-          <span>{config.label}</span>
-        </span>
-        <span className="text-[9px] font-mono text-emerald-600 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-          {signalScore}% Signal
-        </span>
-      </div>
-
-      {/* Media Embed Area */}
-      {item.type !== 'article' && item.youtubeId ? (
-        <div className="rounded-2xl overflow-hidden aspect-video bg-black border border-stone-200/20 shadow-sm">
-          <iframe
-            className="w-full h-full"
-            src={`${config.embedPrefix}${item.youtubeId}?rel=0&modestbranding=1`}
-            title={item.title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-          />
-        </div>
-      ) : item.type !== 'article' ? (
-        <div className="rounded-2xl overflow-hidden aspect-video bg-gradient-to-br from-slate-900 to-indigo-950 flex flex-col items-center justify-center border border-white/10 shadow-sm">
-          <Play className="w-8 h-8 text-white fill-white animate-bounce" />
-          <span className="text-[10px] text-white/60 font-mono mt-1">{config.label}</span>
-        </div>
-      ) : (
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`rounded-2xl overflow-hidden h-32 border flex flex-col justify-between p-4 group/link transition hover:border-indigo-400 ${
-            isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-stone-50 border-stone-200/60'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[9px] font-mono font-bold uppercase text-indigo-500">DEEP DIVE ARTICLE</span>
-            <ExternalLink className="w-3.5 h-3.5 text-stone-400 group-hover/link:text-indigo-500 transition" />
-          </div>
-          <p className={`text-[11px] font-serif italic leading-relaxed line-clamp-2 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
-            "{item.title}"
-          </p>
-          <span className="text-[9px] font-mono text-indigo-400 font-bold truncate">{item.url?.replace('https://', '')}</span>
-        </a>
+    <>
+      {showModal && (
+        <MediaModal item={item} isDarkMode={isDarkMode} onClose={() => setShowModal(false)} />
       )}
 
-      {/* Title */}
-      <h3 className={`font-extrabold text-xs leading-snug line-clamp-2 ${isDarkMode ? 'text-slate-100' : 'text-stone-900'}`}>
-        {item.title}
-      </h3>
-
-      {/* AI Reasoning Badge */}
-      <div className={`p-2.5 rounded-xl border text-[10px] leading-normal flex items-start gap-1.5 ${
-        isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-stone-50 border-stone-200/60 text-stone-500'
+      <div className={`rounded-3xl p-5 border flex flex-col gap-4 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl group ${
+        isDarkMode
+          ? 'bg-slate-950/80 border-slate-800 hover:border-slate-700'
+          : 'bg-white border-stone-200/80 shadow-md hover:shadow-xl'
       }`}>
-        <Brain className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${config.accentColor}`} />
-        <span>{item.reason || 'Curated based on your goal.'}</span>
-      </div>
 
-      {/* Footer */}
-      <div className="flex items-center justify-between mt-auto">
-        <span className={`text-[9px] font-mono font-bold ${config.accentColor}`}>
-          {item.duration}
-        </span>
-        {item.url && (
-          <a
-            href={item.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`text-[9px] font-bold font-mono flex items-center gap-1 hover:underline transition ${config.accentColor}`}
+        {/* Card Top Bar */}
+        <div className="flex items-center justify-between">
+          <span className={`px-2.5 py-1 rounded-full text-[9px] font-bold font-mono uppercase border flex items-center gap-1 ${config.badgeBg(isDarkMode)}`}>
+            <span>{index + 1}.</span>
+            <span>{config.label}</span>
+          </span>
+          <span className="text-[9px] font-mono text-emerald-600 font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+            {signalScore}% Signal
+          </span>
+        </div>
+
+        {/* Media Embed / Preview Area — clicking opens in-app modal */}
+        <button
+          onClick={() => setShowModal(true)}
+          className="relative w-full cursor-pointer group/media rounded-2xl overflow-hidden border border-transparent hover:border-indigo-500/30 transition-all duration-200"
+          aria-label={`Open ${item.title}`}
+        >
+          {isVideo && item.youtubeId ? (
+            <div className="aspect-video bg-black relative">
+              <img
+                src={`https://img.youtube.com/vi/${item.youtubeId}/hqdefault.jpg`}
+                alt={item.title}
+                className="w-full h-full object-cover opacity-80 group-hover/media:opacity-60 transition"
+              />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-14 h-14 rounded-full bg-white/90 flex items-center justify-center shadow-xl group-hover/media:scale-110 transition-transform duration-200">
+                  <Play className="w-6 h-6 text-slate-900 fill-slate-900 ml-1" />
+                </div>
+              </div>
+              <div className="absolute top-2 right-2">
+                <span className="px-2 py-0.5 rounded-md bg-black/70 text-white text-[9px] font-mono font-bold">{item.duration}</span>
+              </div>
+            </div>
+          ) : isVideo ? (
+            <div className="aspect-video bg-gradient-to-br from-slate-900 to-indigo-950 flex flex-col items-center justify-center border border-white/10">
+              <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center group-hover/media:bg-white/20 transition">
+                <Play className="w-6 h-6 text-white fill-white ml-1" />
+              </div>
+              <span className="text-[10px] text-white/50 font-mono mt-2">{config.label}</span>
+            </div>
+          ) : (
+            /* Article preview card — in-app, no redirect */
+            <div className={`rounded-2xl h-32 border flex flex-col justify-between p-4 transition group-hover/media:border-indigo-500/40 ${
+              isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-stone-50 border-stone-200/60'
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-mono font-bold uppercase text-indigo-500">DEEP DIVE ARTICLE</span>
+                <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+              </div>
+              <p className={`text-[11px] font-serif italic leading-relaxed line-clamp-2 ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
+                "{item.title}"
+              </p>
+              <span className="text-[9px] font-mono text-indigo-400 font-bold truncate">{item.url?.replace('https://', '')}</span>
+            </div>
+          )}
+        </button>
+
+        {/* Title */}
+        <h3 className={`font-extrabold text-xs leading-snug line-clamp-2 ${isDarkMode ? 'text-slate-100' : 'text-stone-900'}`}>
+          {item.title}
+        </h3>
+
+        {/* AI Reasoning Badge */}
+        <div className={`p-2.5 rounded-xl border text-[10px] leading-normal flex items-start gap-1.5 ${
+          isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-stone-50 border-stone-200/60 text-stone-500'
+        }`}>
+          <Brain className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${config.accentColor}`} />
+          <span>{item.reason || 'Curated based on your goal.'}</span>
+        </div>
+
+        {/* Footer — open in-app, no redirect */}
+        <div className="flex items-center justify-between mt-auto">
+          <span className={`text-[9px] font-mono font-bold ${config.accentColor}`}>
+            {item.duration}
+          </span>
+          <button
+            onClick={() => setShowModal(true)}
+            className={`text-[9px] font-bold font-mono flex items-center gap-1 hover:underline transition cursor-pointer ${config.accentColor}`}
           >
-            <span>Open</span>
-            <ExternalLink className="w-2.5 h-2.5" />
-          </a>
-        )}
+            <span>{isVideo ? 'Watch' : 'Read'}</span>
+            <ChevronRight className="w-2.5 h-2.5" />
+          </button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
 // -----------------------------------------------
 // MAIN COMPONENT
 // -----------------------------------------------
-export default function AgenticOnboardingFlow({ isDarkMode = false, currentUser = null }) {
-  const [step, setStep] = useState('chat'); // 'chat' | 'curating' | 'feed'
+export default function AgenticOnboardingFlow({ isDarkMode = false }) {
+  // Load valid cached media from localStorage (skip stale entries without youtubeId)
+  const loadCachedMedia = () => {
+    try {
+      const cached = JSON.parse(localStorage.getItem('synapse_curated_media') || '[]');
+      // Only use cached media if ALL video entries have real YouTube IDs
+      const isValid = cached.length >= 4 && cached
+        .filter(i => i.type !== 'article')
+        .every(i => i.youtubeId && i.youtubeId.length > 0 && i.signalScore > 0);
+      return isValid ? cached : null;
+    } catch { return null; }
+  };
+
+  const savedAspiration = localStorage.getItem('synapse_user_aspiration') || localStorage.getItem('aspiration');
+  const cachedMedia = loadCachedMedia();
+
+  const [step, setStep] = useState(() =>
+    savedAspiration && cachedMedia ? 'feed' : 'chat'
+  );
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -144,8 +300,8 @@ export default function AgenticOnboardingFlow({ isDarkMode = false, currentUser 
     }
   ]);
   const [input, setInput] = useState('');
-  const [userGoal, setUserGoal] = useState('');
-  const [recommendations, setRecommendations] = useState([]);
+  const [userGoal, setUserGoal] = useState(savedAspiration || '');
+  const [recommendations, setRecommendations] = useState(cachedMedia || []);
   const [curatingStep, setCuratingStep] = useState(0);
   const bottomRef = useRef(null);
 
@@ -159,6 +315,21 @@ export default function AgenticOnboardingFlow({ isDarkMode = false, currentUser 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, step]);
+
+  // On mount: if current recommendations are stale (no youtubeId), go back to chat to re-fetch
+  useEffect(() => {
+    if (step === 'feed' && recommendations.length > 0) {
+      const hasStale = recommendations.some(
+        i => i.type !== 'article' && (!i.youtubeId || i.youtubeId.length === 0 || i.signalScore === 0)
+      );
+      if (hasStale) {
+        localStorage.removeItem('synapse_curated_media');
+        setStep('chat');
+        setRecommendations([]);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Animate curating steps
   useEffect(() => {
@@ -215,12 +386,23 @@ export default function AgenticOnboardingFlow({ isDarkMode = false, currentUser 
       intent_vector: { source: 'onboarding_chat' }
     });
 
-    // Notify other components about the aspiration update
+    // Fetch AI recommendations & AI roadmap (Gemini + fallback)
+    const [recs, roadmapData] = await Promise.all([
+      fetchAIRecommendations(goalText),
+      fetchAIRoadmap(goalText)
+    ]);
+
+    if (roadmapData && roadmapData.nodes) {
+      localStorage.setItem('synapse_user_roadmap', JSON.stringify(roadmapData.nodes));
+    }
+    window.dispatchEvent(new Event('synapse_roadmap_updated'));
     window.dispatchEvent(new Event('aspirationUpdated'));
 
-    // Fetch AI recommendations (Gemini + fallback)
-    const recs = await fetchAIRecommendations(goalText);
     setRecommendations(recs);
+    // Cache media in localStorage for future loads
+    if (recs && recs.length > 0) {
+      localStorage.setItem('synapse_curated_media', JSON.stringify(recs));
+    }
     setStep('feed');
   };
 

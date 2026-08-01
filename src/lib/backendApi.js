@@ -89,6 +89,10 @@ export async function recommendContent(goal, mood = 'focused', userId = 'usr_def
   return apiFetch('/api/recommend', { goal, mood, user_id: userId });
 }
 
+export async function fetchAIRoadmap(aspiration, userId = 'usr_default') {
+  return apiFetch('/api/roadmap', { aspiration, user_id: userId });
+}
+
 // ── PILLAR 3: Habit Steering / Digital Guardian ───────────────
 export async function checkHabitSteering(activity, durationMinutes, userId = 'usr_default') {
   return apiFetch('/api/habit-check', {

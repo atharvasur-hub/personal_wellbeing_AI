@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { CheckCircle, PlayCircle, Lock, Sparkles, Compass, Trophy, Zap, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CheckCircle, PlayCircle, Lock, Compass, Trophy, Zap, ChevronRight } from 'lucide-react';
 
 const DEFAULT_MILESTONES = [
   {
@@ -49,9 +49,43 @@ const DEFAULT_MILESTONES = [
   }
 ];
 
-export default function UserJourneyTimeline({ milestones = DEFAULT_MILESTONES, isDarkMode = false }) {
-  const list = milestones && milestones.length > 0 ? milestones : DEFAULT_MILESTONES;
+export default function UserJourneyTimeline({ milestones, isDarkMode = false }) {
+  const [currentAspiration, setCurrentAspiration] = useState(() => {
+    return localStorage.getItem('synapse_user_aspiration') || localStorage.getItem('aspiration') || 'Senior AI Architect';
+  });
+
+  const [roadmapNodes, setRoadmapNodes] = useState(() => {
+    if (milestones && milestones.length > 0) return milestones;
+    try {
+      const saved = localStorage.getItem('synapse_user_roadmap');
+      if (saved) return JSON.parse(saved);
+    } catch (e) { }
+    return DEFAULT_MILESTONES;
+  });
+
   const [activeCheckIn, setActiveCheckIn] = useState(false);
+
+  // Sync state with localStorage & custom update events
+  useEffect(() => {
+    const syncState = () => {
+      const savedAspiration = localStorage.getItem('synapse_user_aspiration') || localStorage.getItem('aspiration') || 'Senior AI Architect';
+      setCurrentAspiration(savedAspiration);
+
+      try {
+        const savedRoadmap = localStorage.getItem('synapse_user_roadmap');
+        if (savedRoadmap) {
+          const parsed = JSON.parse(savedRoadmap);
+          if (parsed && parsed.length > 0) setRoadmapNodes(parsed);
+        }
+      } catch (e) { }
+    };
+
+    syncState();
+    window.addEventListener('synapse_roadmap_updated', syncState);
+    return () => window.removeEventListener('synapse_roadmap_updated', syncState);
+  }, []);
+
+  const cleanRoleName = currentAspiration.replace(/^I want to (become|be) a /i, '').trim();
 
   return (
     <div className="w-full max-w-4xl mx-auto py-8 px-4 flex flex-col items-center">
@@ -64,27 +98,27 @@ export default function UserJourneyTimeline({ milestones = DEFAULT_MILESTONES, i
               <Compass className="w-5 h-5" />
             </div>
             <span className={`text-xs font-mono font-bold uppercase tracking-widest ${isDarkMode ? 'text-indigo-400' : 'text-teal-600'}`}>
-              Identity Journey Map
+              AI Career Roadmap
             </span>
           </div>
           <h2 className={`text-3xl font-extrabold tracking-tight ${isDarkMode ? 'text-slate-100' : 'text-stone-900'}`}>
-            Skill Trajectory & Node Progression
+            Skill Trajectory: <span className="text-teal-500">{cleanRoleName}</span>
           </h2>
         </div>
 
         <div className={`px-4 py-2.5 rounded-2xl border flex items-center gap-3 ${isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-stone-200 shadow-xs'}`}>
           <Trophy className="w-5 h-5 text-amber-500" />
           <div>
-            <span className={`block text-[10px] font-mono uppercase ${isDarkMode ? 'text-slate-400' : 'text-stone-400'}`}>Active Velocity</span>
-            <span className={`text-xs font-mono font-bold ${isDarkMode ? 'text-slate-200' : 'text-stone-800'}`}>Node 3 of 5 Unlocked</span>
+            <span className={`block text-[10px] font-mono uppercase ${isDarkMode ? 'text-slate-400' : 'text-stone-400'}`}>Target Role</span>
+            <span className={`text-xs font-mono font-bold ${isDarkMode ? 'text-slate-200' : 'text-stone-800'}`}>{cleanRoleName}</span>
           </div>
         </div>
       </div>
 
       {/* Vertical Timeline Nodes */}
       <div className="flex flex-col items-center w-full max-w-2xl mx-auto space-y-6">
-        {list.map((node, index) => (
-          <div key={node.id} className="relative flex flex-col items-center w-full">
+        {roadmapNodes.map((node, index) => (
+          <div key={node.id || index} className="relative flex flex-col items-center w-full">
 
             {/* Connector Line */}
             {index !== 0 && (
@@ -121,7 +155,7 @@ export default function UserJourneyTimeline({ milestones = DEFAULT_MILESTONES, i
                         ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
                         : 'bg-stone-500/10 text-stone-400 border-stone-500/20'
                     }`}>
-                      {node.status}
+                      {node.status || 'locked'}
                     </span>
                     <span className={`text-[11px] font-mono ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
                       {node.type} • {node.duration_mins} mins
@@ -173,7 +207,7 @@ export default function UserJourneyTimeline({ milestones = DEFAULT_MILESTONES, i
                     <div className={`p-3 rounded-xl text-xs font-mono border animate-fade-in ${
                       isDarkMode ? 'bg-indigo-950/40 border-indigo-500/30 text-indigo-200' : 'bg-teal-50 border-teal-200 text-teal-900'
                     }`}>
-                      🎯 Check-in verified! Synapse AI curated content loaded into your primary feed.
+                      🎯 Check-in verified for {cleanRoleName}! Media feed & VPM metrics synced.
                     </div>
                   )}
                 </div>

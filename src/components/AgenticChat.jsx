@@ -95,25 +95,31 @@ function useMockChat(activeAgent) {
     setInput('');
     setIsLoading(true);
 
-    // Default template fallback in case Ollama takes time
+    // Dynamic template fallback in case backend is loading/offline
     const query = promptText.toLowerCase();
     let responseTemplate = activeAgent.responses.default;
     
     if (activeAgent.id === 'architect') {
-      if (query.includes('react') || query.includes('component') || query.includes('hook')) {
+      if (query.includes('react') || query.includes('component') || query.includes('hook') || query.includes('frontend')) {
         responseTemplate = activeAgent.responses.react;
-      } else if (query.includes('design') || query.includes('system') || query.includes('scale') || query.includes('architect')) {
+      } else if (query.includes('design') || query.includes('system') || query.includes('scale') || query.includes('architect') || query.includes('redis') || query.includes('kafka')) {
         responseTemplate = activeAgent.responses.design;
-      } else if (query.includes('ml') || query.includes('machine') || query.includes('network') || query.includes('model')) {
+      } else if (query.includes('ml') || query.includes('machine') || query.includes('network') || query.includes('model') || query.includes('ai') || query.includes('pytorch')) {
         responseTemplate = activeAgent.responses.ml;
+      } else if (query.includes('python') || query.includes('fastapi') || query.includes('django') || query.includes('backend') || query.includes('sql') || query.includes('code')) {
+        responseTemplate = "🐍 **Python & Backend Mastery Pathway:**\n\n1. **Core Language:** Async I/O (`asyncio`), Type Hints & Generators.\n2. **Frameworks:** FastAPI for async REST APIs & Pydantic validation schemas.\n3. **Databases:** PostgreSQL / Supabase with SQLAlchemy ORM.\n\n*Action Step: Execute a 25-min sprint in Focus Room to practice async endpoints!*";
+      } else {
+        responseTemplate = `🎯 **Skill Architect Curation Strategy:**\n\nRegarding **"${promptText}"**:\n\n1. **Foundations**: Establish underlying mental models and core syntax.\n2. **Practical Execution**: Build a clean, isolated working module.\n3. **Optimization**: Profile for latency, memory bottlenecks, and scale.\n\n*Check your **Journey Map** to track your interactive skill milestones!*`;
       }
     } else {
-      if (query.includes('tired') || query.includes('exhaust') || query.includes('energy') || query.includes('burnout')) {
+      if (query.includes('tired') || query.includes('exhaust') || query.includes('energy') || query.includes('burnout') || query.includes('sleep') || query.includes('fatigue')) {
         responseTemplate = activeAgent.responses.tired;
-      } else if (query.includes('stress') || query.includes('anxious') || query.includes('worry')) {
+      } else if (query.includes('stress') || query.includes('anxious') || query.includes('worry') || query.includes('overwhelmed') || query.includes('panic')) {
         responseTemplate = activeAgent.responses.stress;
-      } else if (query.includes('focus') || query.includes('distract') || query.includes('flow')) {
+      } else if (query.includes('focus') || query.includes('distract') || query.includes('flow') || query.includes('sprint') || query.includes('work')) {
         responseTemplate = activeAgent.responses.focus;
+      } else {
+        responseTemplate = `🌿 **Well-Being Guardian Guidance:**\n\nRegarding **"${promptText}"**:\n\n1. **Pacing Check**: Ensure you alternate 50-minute focus sprints with 10-minute non-screen recovery.\n2. **Visual Reset**: Follow the **20-20-20 rule** to protect your optical nerve health.\n3. **Hydration**: Drink 300ml of cold water to maintain high neural clarity.\n\n*Would you like to start a guided 1-minute box-breathing cycle right now?*`;
       }
     }
 
@@ -134,7 +140,25 @@ function useMockChat(activeAgent) {
         responseTemplate = text;
       }
     } catch (err) {
-      console.warn('Ollama live agent request fallback:', err.message);
+      console.warn('AI Agent request fallback:', err.message);
+    }
+    // Speak the response text safely
+    try {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(responseTemplate.replace(/[*#_`]/g, ''));
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        
+        utterance.onstart = () => setIsSpeaking(true);
+        utterance.onend = () => setIsSpeaking(false);
+        utterance.onerror = () => setIsSpeaking(false);
+        
+        window.speechSynthesis.speak(utterance);
+      }
+    } catch (speechErr) {
+      console.warn('Speech synthesis non-critical error:', speechErr);
+      setIsSpeaking(false);
     }
 
     const assistantMessageId = Math.random().toString(36).substr(2, 9);
@@ -229,10 +253,9 @@ export default function AgenticChat() {
 
   const AgentIcon = activeAgent.icon;
 
-  // Inline styling parser for markdown bullet lists inside chat bubbles
-  const renderMessageContent = (text) => {
-    // Basic replacements for bolding and bullet list styling
-    return text.split('\n').map((line, idx) => {
+  // High-accuracy Markdown parser for code blocks, inline code, bolding, and bullet lists
+  const renderFormattedTextLines = (textChunk) => {
+    return textChunk.split('\n').map((line, idx) => {
       let content = line;
       let isBullet = false;
 
@@ -244,17 +267,27 @@ export default function AgenticChat() {
         isBullet = true;
       }
 
-      // Replace bold syntax **text** with standard React JSX bold tags
-      const boldParts = content.split(/\*\*(.*?)\*\*/g);
-      const parsedText = boldParts.map((part, partIdx) => 
-        partIdx % 2 === 1 ? <strong key={partIdx} className="font-bold text-white">{part}</strong> : part
-      );
+      // Process inline code `code` and bold **text**
+      const inlineCodeParts = content.split(/`(.*?)`/g);
+      const parsedText = inlineCodeParts.map((part, partIdx) => {
+        if (partIdx % 2 === 1) {
+          return (
+            <code key={partIdx} className="bg-slate-800 text-emerald-300 font-mono text-xs px-1.5 py-0.5 rounded border border-white/10">
+              {part}
+            </code>
+          );
+        }
+        const boldParts = part.split(/\*\*(.*?)\*\*/g);
+        return boldParts.map((bPart, bIdx) =>
+          bIdx % 2 === 1 ? <strong key={bIdx} className="font-bold text-white">{bPart}</strong> : bPart
+        );
+      });
 
       if (isBullet) {
         return (
           <div key={idx} className="flex gap-2 ml-4 my-1">
-            <span className="text-emerald-400">•</span>
-            <div className="flex-1">{parsedText}</div>
+            <span className="text-emerald-400 font-bold">•</span>
+            <div className="flex-1 leading-relaxed">{parsedText}</div>
           </div>
         );
       }
@@ -267,6 +300,37 @@ export default function AgenticChat() {
     });
   };
 
+  const renderMessageContent = (text) => {
+    if (!text) return null;
+
+    // Check for code blocks ```
+    if (text.includes('```')) {
+      const parts = text.split(/(```[\s\S]*?```)/g);
+      return parts.map((part, idx) => {
+        if (part.startsWith('```')) {
+          const match = part.match(/^```(\w+)?\n?([\s\S]*?)```$/);
+          const lang = match ? match[1] || '' : '';
+          const codeContent = match ? match[2] : part.slice(3, -3);
+          return (
+            <div key={idx} className="my-3 rounded-xl bg-slate-950 border border-white/10 overflow-hidden font-mono text-xs shadow-lg">
+              {lang && (
+                <div className="px-3 py-1 bg-white/5 border-b border-white/5 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                  {lang}
+                </div>
+              )}
+              <pre className="p-3 text-emerald-300 overflow-x-auto whitespace-pre leading-relaxed">
+                <code>{codeContent.trim()}</code>
+              </pre>
+            </div>
+          );
+        }
+        return <div key={idx}>{renderFormattedTextLines(part)}</div>;
+      });
+    }
+
+    return renderFormattedTextLines(text);
+  };
+
   return (
     <div className="h-full flex flex-col bg-brand-card/30 backdrop-blur-xl border border-white/5 rounded-2xl overflow-hidden shadow-2xl relative">
       
@@ -277,7 +341,9 @@ export default function AgenticChat() {
             <AgentIcon className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="font-bold text-sm text-slate-100">{activeAgent.name}</h3>
+            <h3 className="flex items-center gap-2 font-bold text-sm text-slate-100">
+              {activeAgent.name}
+            </h3>
             <p className="text-xs text-slate-400 font-medium">{activeAgent.role}</p>
           </div>
         </div>
