@@ -17,6 +17,14 @@ API DOCS:
 """
 
 import os
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import json
 import time
 from typing import Optional, List, Dict, Any
@@ -27,11 +35,12 @@ import google.generativeai as genai
 
 # ── Load environment variables ────────────────────────────────
 from dotenv import load_dotenv, find_dotenv
+
 load_dotenv(find_dotenv(usecwd=True))
 
 GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or "").strip()
-if GEMINI_API_KEY == "YOUR_GEMINI_API_KEY_HERE":
-    GEMINI_API_KEY = ""
+if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_API_KEY_HERE" and genai:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 SUPABASE_URL   = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY   = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_ANON_KEY", "")
@@ -72,11 +81,6 @@ gemini_configured = bool(GEMINI_API_KEY)
 supabase_client = None
 if SUPABASE_URL and SUPABASE_KEY and "your-supabase" not in SUPABASE_URL:
     try:
-        from supabase import create_client
-        supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-    except Exception as e:
-        print(f"[FastAPI] Supabase init warning: {e}")
-        supabase_client = None
         from supabase import create_client
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
     except Exception as e:
@@ -832,6 +836,279 @@ async def analyze_intent(req: GoalRequest):
     intent = _analyze_intent(req.goal)
     intent["mood"] = req.mood
     return intent
+
+
+class RoadmapRequest(BaseModel):
+    aspiration: Optional[str] = "Senior AI Architect"
+    topics: Optional[List[str]] = []
+    user_id: Optional[str] = "usr_default"
+
+
+def _build_dynamic_roadmap_nodes(aspiration: str, topics: List[str] = None) -> List[dict]:
+    role = (aspiration or "Senior AI Architect").replace("I want to become a ", "").replace("I want to be a ", "").strip()
+    if not role:
+        role = "Senior AI Architect"
+    role_lower = role.lower()
+    
+    # 1. Python / Backend Engineer
+    if any(k in role_lower for k in ["python", "backend", "fastapi", "django"]):
+        return [
+            {
+                "id": "node-1",
+                "title": "Python Async & Type System Foundation",
+                "subtitle": "Phase 1 • Orientation",
+                "type": "Video Tutorial",
+                "duration_mins": 20,
+                "status": "completed",
+                "description": f"Master asyncio event loops, Pydantic schemas, and type hinting for {role} baseline."
+            },
+            {
+                "id": "node-2",
+                "title": "FastAPI REST & Middleware Architecture",
+                "subtitle": "Phase 2 • Focus Sprint Check-in",
+                "type": "Focus Sprint",
+                "duration_mins": 30,
+                "status": "completed",
+                "description": "Build non-blocking REST endpoints with custom CORS, dependency injection, and JWT security."
+            },
+            {
+                "id": "node-3",
+                "title": "PostgreSQL & Supabase Database Optimization",
+                "subtitle": "Phase 3 • Active Journey Node",
+                "type": "Interactive AI Feed",
+                "duration_mins": 25,
+                "status": "active",
+                "description": "Design relational schemas, composite B-tree indexing, and query ORM connection pooling."
+            },
+            {
+                "id": "node-4",
+                "title": "Microservices, Caching & Redis Integration",
+                "subtitle": "Phase 4 • System Architecture",
+                "type": "Deep Dive Article",
+                "duration_mins": 45,
+                "status": "locked",
+                "description": "Implement Redis read-through caching, rate-limiting algorithms, and pub/sub queue patterns."
+            },
+            {
+                "id": "node-5",
+                "title": f"Mastery Verification & {role} Audit",
+                "subtitle": "Phase 5 • Final Calibration",
+                "type": "Performance Audit",
+                "duration_mins": 20,
+                "status": "locked",
+                "description": f"Execute 10/10 node verification audit and benchmark VPM productivity for {role}."
+            }
+        ]
+
+    # 2. React / Frontend Engineer
+    elif any(k in role_lower for k in ["react", "frontend", "javascript", "ui", "ux", "web"]):
+        return [
+            {
+                "id": "node-1",
+                "title": "Modern React & Component Lifecycle Baseline",
+                "subtitle": "Phase 1 • Orientation",
+                "type": "Video Tutorial",
+                "duration_mins": 15,
+                "status": "completed",
+                "description": "Master functional components, props contracts, and strict state immutability."
+            },
+            {
+                "id": "node-2",
+                "title": "State Hygiene & Custom React Hooks",
+                "subtitle": "Phase 2 • Focus Sprint Check-in",
+                "type": "Focus Sprint",
+                "duration_mins": 25,
+                "status": "completed",
+                "description": "Optimize component renders using useCallback, useMemo, and custom reusable hook abstractions."
+            },
+            {
+                "id": "node-3",
+                "title": "Tailwind Design Systems & Glassmorphism UI",
+                "subtitle": "Phase 3 • Active Journey Node",
+                "type": "Interactive AI Feed",
+                "duration_mins": 20,
+                "status": "active",
+                "description": "Build high-signal responsive dashboards with dark modes, CSS grid, and micro-animations."
+            },
+            {
+                "id": "node-4",
+                "title": "Single Page Routing, State Management & Vite",
+                "subtitle": "Phase 4 • Frontend Architecture",
+                "type": "Deep Dive Article",
+                "duration_mins": 40,
+                "status": "locked",
+                "description": "Implement global state contexts, code-splitting lazy loaders, and Vite production bundling."
+            },
+            {
+                "id": "node-5",
+                "title": f"Frontend Mastery & {role} Verification",
+                "subtitle": "Phase 5 • Final Calibration",
+                "type": "Performance Audit",
+                "duration_mins": 20,
+                "status": "locked",
+                "description": f"Verify UI/UX accessibility standards and audit render performance for {role}."
+            }
+        ]
+
+    # 3. AI / Machine Learning Architect
+    elif any(k in role_lower for k in ["ai", "ml", "machine learning", "pytorch", "data scientist", "deep learning"]):
+        return [
+            {
+                "id": "node-1",
+                "title": "Tensor Mathematics & NumPy/Pandas Baseline",
+                "subtitle": "Phase 1 • Orientation",
+                "type": "Video Tutorial",
+                "duration_mins": 20,
+                "status": "completed",
+                "description": "Calibrate matrix multiplication, gradient descent math, and data vectorization skills."
+            },
+            {
+                "id": "node-2",
+                "title": "PyTorch Neural Block & Autograd Pipeline",
+                "subtitle": "Phase 2 • Focus Sprint Check-in",
+                "type": "Focus Sprint",
+                "duration_mins": 30,
+                "status": "completed",
+                "description": "Build modular PyTorch residual layers, loss functions, and backpropagation training loops."
+            },
+            {
+                "id": "node-3",
+                "title": "Vector Databases, Embeddings & RAG Systems",
+                "subtitle": "Phase 3 • Active Journey Node",
+                "type": "Interactive AI Feed",
+                "duration_mins": 25,
+                "status": "active",
+                "description": "Construct high-signal retrieval-augmented generation pipelines using vector embeddings."
+            },
+            {
+                "id": "node-4",
+                "title": "LLM Fine-Tuning & Model Deployment",
+                "subtitle": "Phase 4 • System Architecture",
+                "type": "Deep Dive Article",
+                "duration_mins": 45,
+                "status": "locked",
+                "description": "Quantize neural weights, serve inference models via FastAPI, and monitor latency bounds."
+            },
+            {
+                "id": "node-5",
+                "title": f"AI Benchmark & {role} Verification",
+                "subtitle": "Phase 5 • Final Calibration",
+                "type": "Performance Audit",
+                "duration_mins": 20,
+                "status": "locked",
+                "description": f"Audit accuracy metrics and verify complete end-to-end pipeline for {role}."
+            }
+        ]
+
+    # 4. Java / Enterprise Developer
+    elif any(k in role_lower for k in ["java", "spring", "enterprise"]):
+        return [
+            {
+                "id": "node-1",
+                "title": "Java Object-Oriented Fundamentals & Core API",
+                "subtitle": "Phase 1 • Orientation",
+                "type": "Video Tutorial",
+                "duration_mins": 20,
+                "status": "completed",
+                "description": "Establish baseline encapsulation, polymorphism, interfaces, and strong type safety."
+            },
+            {
+                "id": "node-2",
+                "title": "JVM Memory Tuning & Concurrency Streams",
+                "subtitle": "Phase 2 • Focus Sprint Check-in",
+                "type": "Focus Sprint",
+                "duration_mins": 30,
+                "status": "completed",
+                "description": "Optimize Garbage Collection, heap stack allocations, and parallel Stream pipelines."
+            },
+            {
+                "id": "node-3",
+                "title": "Spring Boot Microservices & REST Controllers",
+                "subtitle": "Phase 3 • Active Journey Node",
+                "type": "Interactive AI Feed",
+                "duration_mins": 25,
+                "status": "active",
+                "description": "Build Spring Data JPA repositories, Dependency Injection beans, and Spring Security."
+            },
+            {
+                "id": "node-4",
+                "title": "Distributed Messaging & Kafka Event Streams",
+                "subtitle": "Phase 4 • System Architecture",
+                "type": "Deep Dive Article",
+                "duration_mins": 45,
+                "status": "locked",
+                "description": "Decouple microservices using Apache Kafka event topics and transaction managers."
+            },
+            {
+                "id": "node-5",
+                "title": f"Enterprise Audit & {role} Verification",
+                "subtitle": "Phase 5 • Final Calibration",
+                "type": "Performance Audit",
+                "duration_mins": 20,
+                "status": "locked",
+                "description": f"Verify 10/10 node mastery and enterprise production standards for {role}."
+            }
+        ]
+
+    # 5. Default Generic Role Generator
+    else:
+        return [
+            {
+                "id": "node-1",
+                "title": f"Foundational {role} Principles & Calibration",
+                "subtitle": "Phase 1 • Orientation",
+                "type": "Video Tutorial",
+                "duration_mins": 15,
+                "status": "completed",
+                "description": f"Establish core domain metrics and calibrate goal trajectory for {role}."
+            },
+            {
+                "id": "node-2",
+                "title": f"Deep Focus Execution Sprint for {role}",
+                "subtitle": "Phase 2 • Sprint Check-in",
+                "type": "Focus Sprint",
+                "duration_mins": 25,
+                "status": "completed",
+                "description": "25-minute uninterrupted execution block targeting core skill building."
+            },
+            {
+                "id": "node-3",
+                "title": f"Identity Graph & Media Curation: {role}",
+                "subtitle": "Phase 3 • Active Journey Node",
+                "type": "Interactive AI Feed",
+                "duration_mins": 20,
+                "status": "active",
+                "description": f"AI-curated high-signal learning resources specifically matching {role}."
+            },
+            {
+                "id": "node-4",
+                "title": f"Advanced System Design & Strategy for {role}",
+                "subtitle": "Phase 4 • Skill Matrix",
+                "type": "Deep Dive Article",
+                "duration_mins": 40,
+                "status": "locked",
+                "description": f"Master high-level architecture, problem-solving frameworks, and real-world patterns."
+            },
+            {
+                "id": "node-5",
+                "title": f"Mastery Verification & {role} Audit",
+                "subtitle": "Phase 5 • Final Calibration",
+                "type": "Performance Audit",
+                "duration_mins": 20,
+                "status": "locked",
+                "description": f"Verify 10/10 node mastery and optimize Value Per Minute index for {role}."
+            }
+        ]
+
+
+@app.post("/api/roadmap")
+async def get_dynamic_roadmap(req: RoadmapRequest):
+    nodes = _build_dynamic_roadmap_nodes(req.aspiration, req.topics)
+    return {
+        "status": "success",
+        "aspiration": req.aspiration,
+        "roadmap": nodes
+    }
 
 
 def _analyze_intent(goal: str) -> Dict[str, Any]:
@@ -1722,24 +1999,40 @@ class TutorRequest(BaseModel):
     topic: str
 
 @app.post("/api/tutor")
-def ai_tutor(req: TutorRequest):
-    topic_name = req.topic.strip()
-    if not topic_name:
+def generate_tutor_explanation(payload: TutorRequest):
+    topic_text = payload.topic.strip()
+    
+    if not topic_text:
         raise HTTPException(status_code=400, detail="Topic cannot be empty.")
     
-    explanation = (
-        f"### Breakdown of **{topic_name}**\n\n"
-        f"1. **Core Definition**: {topic_name} is a powerful technology/concept used to build scalable systems, write efficient logic, and solve computational problems.\n"
-        f"2. **Key Components**: \n"
-        f"   - Syntax, structure, and foundational rules of {topic_name}.\n"
-        f"   - Best practices for writing clean and maintainable code.\n"
-        f"   - Common debugging patterns and performance optimization.\n"
-        f"3. **Practical Application**: You use {topic_name} when developing robust software solutions, managing data structures, or structuring application logic from scratch."
-    )
+    # Check if Gemini is configured
+    if not genai or not GEMINI_API_KEY or GEMINI_API_KEY == "YOUR_GEMINI_API_KEY_HERE":
+        # Fallback explanation if API key is missing
+        explanation_content = (
+            f"⚠️ **Gemini API Key Missing**\n\n"
+            f"Please configure your `GEMINI_API_KEY` in the backend `.env` file to unlock real-time explanations for **{topic_text}**."
+        )
+    else:
+        try:
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            prompt = (
+                f"You are an expert AI Tutor. The user is asking about or taking action on the topic: '{topic_text}'. "
+                f"Provide a clear, educational, and structured explanation. Use markdown with bullet points and bold text where appropriate."
+            )
+            response = model.generate_content(prompt)
+            explanation_content = response.text.strip()
+        except Exception as e:
+            print(f"Gemini API Error: {e}")
+            explanation_content = (
+                f"⚠️ **Error generating response**\n\n"
+                f"Could not fetch AI response for **{topic_text}**. Please try again later or check your API key constraints."
+            )
+    
     return {
+        "status": "success",
         "success": True,
-        "topic": topic_name,
-        "explanation": explanation
+        "topic": topic_text,
+        "explanation": explanation_content
     }
 
 @app.post("/signup")
