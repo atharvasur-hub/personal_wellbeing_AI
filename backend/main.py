@@ -17,16 +17,16 @@ API DOCS:
 """
 
 import os
+import sqlite3
 import json
 import time
+import urllib.request
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-import urllib.request
-import sqlite3
 
 try:
     from google import genai
@@ -163,33 +163,39 @@ def tutor_endpoint(payload: TutorRequest):
         "explanation": f"### Overview of **{topic}**\n\n1. **Core Concept**: {topic} is a key architectural component used to manage state, structure logic, and streamline execution.\n2. **Best Practices**: Ensure proper error handling, modular design, and clean separation of concerns."
     }
 
-# --- 1. Database Setup ---
-# This creates a local file named 'users.db' and builds the table if it doesn't exist
 def init_db():
-    conn = sqlite3.connect("users.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            email TEXT UNIQUE,
-            password TEXT
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS community_messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            community_id TEXT,
-            sender_id TEXT,
-            sender_name TEXT,
-            role TEXT,
-            text TEXT,
-            is_announcement INTEGER DEFAULT 0,
-            created_at TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
+    try:
+        db_path = "/tmp/users.db" if os.environ.get("VERCEL") else "users.db"
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                email TEXT UNIQUE,
+                password TEXT
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS community_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                community_id TEXT,
+                sender_id TEXT,
+                sender_name TEXT,
+                role TEXT,
+                text TEXT,
+                is_announcement INTEGER DEFAULT 0,
+                created_at TEXT
+            )
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Warning: Could not initialize local SQLite DB: {e}")
+
+@app.on_event("startup")
+def startup_event():
+    init_db()
 
 # ═══════════════════════════════════════════════════════════════
 # PYDANTIC SCHEMAS
@@ -1895,21 +1901,32 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 @app.post("/api/points/award")
 async def award_points(req: PointsAwardRequest):
+    # Enforce points logic on backend
+    points_to_award = req.points
+    if req.action_type == "video_watched":
+        points_to_award = 10
+    elif req.action_type == "focus_mode_complete":
+        points_to_award = 50
+    elif req.action_type == "podcast_listened":
+        points_to_award = 15
+    elif req.action_type == "speech_read":
+        points_to_award = 5
+
     if not supabase_client:
-        return {"status": "success", "message": "Logged to in-memory fallback", "points": req.points}
+        return {"status": "success", "message": "Logged to in-memory fallback", "points": points_to_award}
     
     try:
         # 1. Log the interaction
         supabase_client.table("points_log").insert({
             "user_id": req.user_id,
             "action_type": req.action_type,
-            "points_awarded": req.points
+            "points_awarded": points_to_award
         }).execute()
         
         # 2. Update total points
         res = supabase_client.table("user_points").select("total_points").eq("user_id", req.user_id).execute()
         if res.data and len(res.data) > 0:
-            new_points = res.data[0]["total_points"] + req.points
+            new_points = res.data[0]["total_points"] + points_to_award
             supabase_client.table("user_points").update({"total_points": new_points}).eq("user_id", req.user_id).execute()
         else:
             new_points = req.points
