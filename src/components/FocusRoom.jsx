@@ -1,20 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Clock, 
-  Play, 
-  Pause, 
-  RotateCcw, 
-  ShieldAlert, 
-  Maximize2, 
-  Minimize2, 
-  Volume2, 
-  VolumeX, 
-  CheckCircle2, 
-  Sparkles,
-  Flame,
-  Brain,
-  Zap,
-  Lock
+import {
+  Clock,
+  Play,
+  Pause,
+  RotateCcw,
+  ShieldAlert,
+  Volume2,
+  VolumeX,
+  CheckCircle2,
+  ShieldAsync,
+  Lock,
+  CloudRain
 } from 'lucide-react';
 import { saveHabitSteeringLogToSupabase } from '../lib/supabaseClient';
 
@@ -23,7 +19,7 @@ export default function FocusRoom({ isDarkMode = false }) {
   const [inputHours, setInputHours] = useState(0);
   const [inputMinutes, setInputMinutes] = useState(25);
   const [focusTask, setFocusTask] = useState('Master React Hooks & Memory Leak Audit');
-  
+
   // Timer States
   const [isActive, setIsActive] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -37,9 +33,75 @@ export default function FocusRoom({ isDarkMode = false }) {
   const [showDistractionShield, setShowDistractionShield] = useState(false);
   const [ambientAudioActive, setAmbientAudioActive] = useState(false);
 
+  // NEW: White Noise Audio States & Refs
+  const [whiteNoiseActive, setWhiteNoiseActive] = useState(false);
+  const audioCtxRef = useRef(null);
+  const noiseNodeRef = useRef(null);
+  const gainNodeRef = useRef(null);
+
   const containerRef = useRef(null);
 
-  // 1. COUNTDOWN TIMER INTERVAL
+  // 1. WHITE NOISE AUDIO ENGINE (Web Audio API)
+  useEffect(() => {
+    if (whiteNoiseActive) {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        audioCtxRef.current = new AudioContext();
+
+        // Create white noise buffer (5 seconds of random pink/white noise data)
+        const bufferSize = audioCtxRef.current.sampleRate * 2;
+        const noiseBuffer = audioCtxRef.current.createBuffer(1, bufferSize, audioCtxRef.current.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+
+        for (let i = 0; i < bufferSize; i++) {
+          output[i] = Math.random() * 2 - 1; // White noise random generator
+        }
+
+        noiseNodeRef.current = audioCtxRef.current.createBufferSource();
+        noiseNodeRef.current.buffer = noiseBuffer;
+        noiseNodeRef.current.loop = true;
+
+        // Create volume gain node for smooth control
+        gainNodeRef.current = audioCtxRef.current.createGain();
+        gainNodeRef.current.gain.value = 0.15; // Comfortable background level
+
+        noiseNodeRef.current.connect(gainNodeRef.current);
+        gainNodeRef.current.connect(audioCtxRef.current.destination);
+        noiseNodeRef.current.start(0);
+      } catch (err) {
+        console.warn('Web Audio API error:', err);
+      }
+    } else {
+      // Clean up audio nodes on toggle off
+      if (noiseNodeRef.current) {
+        try {
+          noiseNodeRef.current.stop();
+          noiseNodeRef.current.disconnect();
+        } catch (e) { }
+      }
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close();
+      }
+    }
+
+    return () => {
+      if (noiseNodeRef.current) {
+        try {
+          noiseNodeRef.current.stop();
+        } catch (e) { }
+      }
+    };
+  }, [whiteNoiseActive]);
+
+  // Turn off audio automatically when session ends or resets
+  useEffect(() => {
+    if (!isActive || isCompleted) {
+      setWhiteNoiseActive(false);
+      setAmbientAudioActive(false);
+    }
+  }, [isActive, isCompleted]);
+
+  // 2. COUNTDOWN TIMER INTERVAL
   useEffect(() => {
     let interval = null;
     if (isActive && !isPaused && secondsLeft > 0) {
@@ -49,7 +111,7 @@ export default function FocusRoom({ isDarkMode = false }) {
     } else if (secondsLeft === 0 && isActive) {
       setIsActive(false);
       setIsCompleted(true);
-      
+
       saveHabitSteeringLogToSupabase({
         intercept_trigger: 'focus_sprint_complete',
         time_saved_minutes: Math.round(totalSeconds / 60),
@@ -60,7 +122,7 @@ export default function FocusRoom({ isDarkMode = false }) {
     return () => clearInterval(interval);
   }, [isActive, isPaused, secondsLeft, totalSeconds, focusTask]);
 
-  // 2. BLOCK CLOSING WEBSITE (beforeunload Event Listener)
+  // 3. BLOCK CLOSING WEBSITE (beforeunload Event Listener)
   useEffect(() => {
     const handleBeforeUnload = (e) => {
       if (isActive && secondsLeft > 0) {
@@ -74,7 +136,7 @@ export default function FocusRoom({ isDarkMode = false }) {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isActive, secondsLeft]);
 
-  // 3. STRICT ESCAPE KEY INTERCEPT (Prevent Esc Key Exit)
+  // 4. STRICT ESCAPE KEY INTERCEPT (Prevent Esc Key Exit)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (isActive && !isCompleted && e.key === 'Escape') {
@@ -82,10 +144,9 @@ export default function FocusRoom({ isDarkMode = false }) {
         e.stopPropagation();
         setDistractionCount(prev => prev + 1);
         setShowDistractionShield(true);
-        
-        // Re-enforce fullscreen if exited
+
         if (containerRef.current && !document.fullscreenElement) {
-          containerRef.current.requestFullscreen().catch(() => {});
+          containerRef.current.requestFullscreen().catch(() => { });
         }
       }
     };
@@ -95,7 +156,7 @@ export default function FocusRoom({ isDarkMode = false }) {
         setDistractionCount(prev => prev + 1);
         setShowDistractionShield(true);
         if (containerRef.current) {
-          containerRef.current.requestFullscreen().catch(() => {});
+          containerRef.current.requestFullscreen().catch(() => { });
         }
       }
     };
@@ -109,7 +170,7 @@ export default function FocusRoom({ isDarkMode = false }) {
     };
   }, [isActive, isCompleted]);
 
-  // 4. BLOCK TAB SWITCHING & OTHER APPS (Page Visibility API)
+  // 5. BLOCK TAB SWITCHING & OTHER APPS (Page Visibility API)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden && isActive && !isCompleted) {
@@ -142,9 +203,8 @@ export default function FocusRoom({ isDarkMode = false }) {
     setDistractionCount(0);
     setShowDistractionShield(false);
 
-    // Enter strict full-screen mode on start
     if (containerRef.current && !document.fullscreenElement) {
-      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+      containerRef.current.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => { });
     }
   };
 
@@ -154,8 +214,9 @@ export default function FocusRoom({ isDarkMode = false }) {
     setIsPaused(false);
     setIsCompleted(false);
     setShowDistractionShield(false);
+    setWhiteNoiseActive(false);
     if (document.fullscreenElement) {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => { });
     }
   };
 
@@ -174,24 +235,20 @@ export default function FocusRoom({ isDarkMode = false }) {
   const progressPct = Math.round(((totalSeconds - secondsLeft) / totalSeconds) * 100) || 0;
 
   return (
-    <div 
+    <div
       ref={containerRef}
-      className={`w-full max-w-5xl mx-auto transition-all duration-300 relative ${
-        isFullscreen ? 'p-10 flex flex-col justify-center min-h-screen bg-slate-950 text-white' : ''
-      }`}
+      className={`w-full max-w-5xl mx-auto transition-all duration-300 relative ${isFullscreen ? 'p-10 flex flex-col justify-center min-h-screen bg-slate-950 text-white' : ''
+        }`}
     >
-      
-      {/* MANUAL TIME SELECTION FORM (NO PRESET BUTTONS) */}
+
+      {/* MANUAL TIME SELECTION FORM */}
       {!isActive && !isCompleted && (
-        <div className={`rounded-[2rem] p-8 md:p-12 border shadow-2xl backdrop-blur-xl animate-fade-in flex flex-col gap-8 ${
-          isDarkMode ? 'bg-slate-900/90 border-slate-800 text-slate-100' : 'bg-white/80 border-stone-100 text-stone-900'
-        }`}>
-          {/* Header */}
+        <div className={`rounded-[2rem] p-8 md:p-12 border shadow-2xl backdrop-blur-xl animate-fade-in flex flex-col gap-8 ${isDarkMode ? 'bg-slate-900/90 border-slate-800 text-slate-100' : 'bg-white/80 border-stone-100 text-stone-900'
+          }`}>
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2.5">
-              <div className={`p-2 rounded-2xl ${
-                isDarkMode ? 'bg-indigo-500/15 text-indigo-400' : 'bg-teal-100 text-teal-600'
-              }`}>
+              <div className={`p-2 rounded-2xl ${isDarkMode ? 'bg-indigo-500/15 text-indigo-400' : 'bg-teal-100 text-teal-600'
+                }`}>
                 <Clock className="w-6 h-6 animate-pulse" />
               </div>
               <div>
@@ -206,7 +263,6 @@ export default function FocusRoom({ isDarkMode = false }) {
             </p>
           </div>
 
-          {/* Task Objective Input */}
           <div className="flex flex-col gap-2">
             <label className="text-xs font-extrabold uppercase font-mono tracking-wider text-stone-400">
               Sprint Objective / Task
@@ -216,24 +272,20 @@ export default function FocusRoom({ isDarkMode = false }) {
               value={focusTask}
               onChange={(e) => setFocusTask(e.target.value)}
               placeholder="What specific task will you complete in this sprint?"
-              className={`w-full border rounded-2xl px-5 py-3.5 text-xs md:text-sm font-semibold focus:outline-none transition shadow-sm ${
-                isDarkMode 
-                  ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-500 focus:border-indigo-500' 
+              className={`w-full border rounded-2xl px-5 py-3.5 text-xs md:text-sm font-semibold focus:outline-none transition shadow-sm ${isDarkMode
+                  ? 'bg-slate-950 border-slate-800 text-slate-100 placeholder-slate-500 focus:border-indigo-500'
                   : 'bg-stone-50 border-stone-200 text-stone-800 focus:border-teal-500'
-              }`}
+                }`}
             />
           </div>
 
-          {/* MANUAL CLOCK INPUT SELECTOR (HOURS & MINUTES) */}
           <div className="flex flex-col gap-3">
             <label className="text-xs font-extrabold uppercase font-mono tracking-wider text-stone-400">
               Set Target Focus Time
             </label>
 
-            <div className={`p-6 rounded-3xl border flex items-center justify-center gap-6 ${
-              isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-stone-50 border-stone-200/80'
-            }`}>
-              {/* Hours Input */}
+            <div className={`p-6 rounded-3xl border flex items-center justify-center gap-6 ${isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-stone-50 border-stone-200/80'
+              }`}>
               <div className="flex flex-col items-center gap-1">
                 <span className="text-[10px] font-mono font-bold uppercase text-stone-400">HOURS</span>
                 <input
@@ -242,15 +294,13 @@ export default function FocusRoom({ isDarkMode = false }) {
                   max="23"
                   value={inputHours}
                   onChange={(e) => setInputHours(Math.max(0, parseInt(e.target.value) || 0))}
-                  className={`w-24 text-center text-3xl font-black font-mono border rounded-2xl py-3 focus:outline-none ${
-                    isDarkMode ? 'bg-slate-900 border-indigo-500/40 text-indigo-300' : 'bg-white border-teal-200 text-teal-700'
-                  }`}
+                  className={`w-24 text-center text-3xl font-black font-mono border rounded-2xl py-3 focus:outline-none ${isDarkMode ? 'bg-slate-900 border-indigo-500/40 text-indigo-300' : 'bg-white border-teal-200 text-teal-700'
+                    }`}
                 />
               </div>
 
               <span className="text-3xl font-black font-mono text-stone-400 mt-4">:</span>
 
-              {/* Minutes Input */}
               <div className="flex flex-col items-center gap-1">
                 <span className="text-[10px] font-mono font-bold uppercase text-stone-400">MINUTES</span>
                 <input
@@ -259,22 +309,19 @@ export default function FocusRoom({ isDarkMode = false }) {
                   max="59"
                   value={inputMinutes}
                   onChange={(e) => setInputMinutes(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))}
-                  className={`w-24 text-center text-3xl font-black font-mono border rounded-2xl py-3 focus:outline-none ${
-                    isDarkMode ? 'bg-slate-900 border-indigo-500/40 text-indigo-300' : 'bg-white border-teal-200 text-teal-700'
-                  }`}
+                  className={`w-24 text-center text-3xl font-black font-mono border rounded-2xl py-3 focus:outline-none ${isDarkMode ? 'bg-slate-900 border-indigo-500/40 text-indigo-300' : 'bg-white border-teal-200 text-teal-700'
+                    }`}
                 />
               </div>
             </div>
           </div>
 
-          {/* Action Trigger Button */}
           <button
             onClick={handleStartFocus}
-            className={`w-full py-4 rounded-2xl text-white font-black text-sm tracking-wider uppercase shadow-xl transition flex items-center justify-center gap-2 cursor-pointer ${
-              isDarkMode 
-                ? 'bg-gradient-to-r from-indigo-500 via-violet-600 to-teal-400 hover:shadow-indigo-500/25' 
+            className={`w-full py-4 rounded-2xl text-white font-black text-sm tracking-wider uppercase shadow-xl transition flex items-center justify-center gap-2 cursor-pointer ${isDarkMode
+                ? 'bg-gradient-to-r from-indigo-500 via-violet-600 to-teal-400 hover:shadow-indigo-500/25'
                 : 'bg-gradient-to-r from-teal-400 via-cyan-500 to-indigo-500 hover:shadow-teal-500/25'
-            }`}
+              }`}
           >
             <Lock className="w-5 h-5" />
             <span>Lock Focus Chamber ({inputHours}h {inputMinutes}m)</span>
@@ -284,13 +331,11 @@ export default function FocusRoom({ isDarkMode = false }) {
 
       {/* ACTIVE COUNTDOWN TIMER CHAMBER */}
       {isActive && (
-        <div className={`rounded-[2.5rem] p-8 md:p-14 border shadow-2xl backdrop-blur-2xl text-center flex flex-col items-center justify-center gap-8 relative overflow-hidden animate-fade-in ${
-          isDarkMode 
-            ? 'bg-slate-900/95 border-indigo-500/30 text-slate-100 shadow-indigo-500/20' 
+        <div className={`rounded-[2.5rem] p-8 md:p-14 border shadow-2xl backdrop-blur-2xl text-center flex flex-col items-center justify-center gap-8 relative overflow-hidden animate-fade-in ${isDarkMode
+            ? 'bg-slate-900/95 border-indigo-500/30 text-slate-100 shadow-indigo-500/20'
             : 'bg-white/95 border-teal-200 text-stone-900 shadow-teal-500/20'
-        }`}>
-          
-          {/* Top Live Lock Status Bar */}
+          }`}>
+
           <div className="flex items-center justify-between w-full pb-4 border-b border-stone-200/40">
             <div className="flex items-center gap-2 text-xs font-mono font-bold text-emerald-500">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
@@ -298,13 +343,25 @@ export default function FocusRoom({ isDarkMode = false }) {
             </div>
 
             <div className="flex items-center gap-2">
+              {/* WHITE NOISE GENERATOR TOGGLE BUTTON */}
+              <button
+                onClick={() => setWhiteNoiseActive(!whiteNoiseActive)}
+                className={`p-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${whiteNoiseActive
+                    ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300 shadow-sm'
+                    : isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-stone-100 border-stone-200 text-stone-500'
+                  }`}
+                title="Toggle Clean White Noise Generator"
+              >
+                <CloudRain className="w-4 h-4" />
+                <span>White Noise {whiteNoiseActive ? 'ON' : 'OFF'}</span>
+              </button>
+
               <button
                 onClick={() => setAmbientAudioActive(!ambientAudioActive)}
-                className={`p-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${
-                  ambientAudioActive 
-                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500' 
+                className={`p-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition cursor-pointer ${ambientAudioActive
+                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
                     : isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-400' : 'bg-stone-100 border-stone-200 text-stone-500'
-                }`}
+                  }`}
                 title="Toggle 40Hz Binaural Ambient Audio"
               >
                 {ambientAudioActive ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
@@ -313,13 +370,11 @@ export default function FocusRoom({ isDarkMode = false }) {
             </div>
           </div>
 
-          {/* Current Task Display */}
           <div className="flex flex-col gap-1 max-w-lg">
             <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-stone-400">ACTIVE TASK</span>
             <h3 className="text-base font-extrabold line-clamp-1">{focusTask}</h3>
           </div>
 
-          {/* Countdown Clock & Progress Circle */}
           <div className="relative my-4 flex items-center justify-center">
             <svg className="w-72 h-72 transform -rotate-90">
               <circle
@@ -340,9 +395,8 @@ export default function FocusRoom({ isDarkMode = false }) {
                 strokeDasharray={753}
                 strokeDashoffset={753 - (753 * progressPct) / 100}
                 strokeLinecap="round"
-                className={`transition-all duration-1000 ${
-                  isDarkMode ? 'text-indigo-400' : 'text-teal-500'
-                }`}
+                className={`transition-all duration-1000 ${isDarkMode ? 'text-indigo-400' : 'text-teal-500'
+                  }`}
                 fill="transparent"
               />
             </svg>
@@ -357,7 +411,6 @@ export default function FocusRoom({ isDarkMode = false }) {
             </div>
           </div>
 
-          {/* Distraction Stats */}
           {distractionCount > 0 && (
             <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs font-mono font-bold flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 shrink-0" />
@@ -365,15 +418,13 @@ export default function FocusRoom({ isDarkMode = false }) {
             </div>
           )}
 
-          {/* Controls */}
           <div className="flex items-center gap-4">
             <button
               onClick={() => setIsPaused(!isPaused)}
-              className={`px-6 py-3 rounded-2xl border text-xs font-black uppercase tracking-wider flex items-center gap-2 transition cursor-pointer ${
-                isPaused 
-                  ? 'bg-emerald-500 border-emerald-400 text-white shadow-md' 
+              className={`px-6 py-3 rounded-2xl border text-xs font-black uppercase tracking-wider flex items-center gap-2 transition cursor-pointer ${isPaused
+                  ? 'bg-emerald-500 border-emerald-400 text-white shadow-md'
                   : isDarkMode ? 'bg-slate-800 border-slate-700 text-slate-200' : 'bg-stone-100 border-stone-200 text-stone-800'
-              }`}
+                }`}
             >
               {isPaused ? <Play className="w-4 h-4 fill-current" /> : <Pause className="w-4 h-4" />}
               <span>{isPaused ? 'Resume Sprint' : 'Pause'}</span>
@@ -392,9 +443,8 @@ export default function FocusRoom({ isDarkMode = false }) {
 
       {/* SPRINT COMPLETE CELEBRATION STATE */}
       {isCompleted && (
-        <div className={`rounded-[2.5rem] p-10 md:p-14 border shadow-2xl backdrop-blur-xl text-center flex flex-col items-center justify-center gap-6 animate-fade-in ${
-          isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-stone-100 text-stone-900'
-        }`}>
+        <div className={`rounded-[2.5rem] p-10 md:p-14 border shadow-2xl backdrop-blur-xl text-center flex flex-col items-center justify-center gap-6 animate-fade-in ${isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-100' : 'bg-white border-stone-100 text-stone-900'
+          }`}>
           <div className="w-20 h-20 rounded-full bg-emerald-500/10 border-2 border-emerald-500 text-emerald-500 flex items-center justify-center shadow-lg">
             <CheckCircle2 className="w-10 h-10 animate-bounce" />
           </div>
@@ -418,7 +468,7 @@ export default function FocusRoom({ isDarkMode = false }) {
         </div>
       )}
 
-      {/* ANTI-ESCAPE / DISTRACTION SHIELD MODAL */}
+      {/* DISTRACTION SHIELD MODAL */}
       {showDistractionShield && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md animate-fade-in text-white text-center">
           <div className="max-w-md p-8 rounded-3xl border border-amber-500/30 bg-slate-900 shadow-2xl flex flex-col items-center justify-center gap-4">
@@ -433,7 +483,7 @@ export default function FocusRoom({ isDarkMode = false }) {
               onClick={() => {
                 setShowDistractionShield(false);
                 if (containerRef.current && !document.fullscreenElement) {
-                  containerRef.current.requestFullscreen().catch(() => {});
+                  containerRef.current.requestFullscreen().catch(() => { });
                 }
               }}
               className="w-full py-3.5 rounded-2xl bg-amber-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-md hover:bg-amber-400 transition cursor-pointer"
