@@ -35,6 +35,7 @@ import {
   LogOut
 } from 'lucide-react';
 import CuratedFeed from './CuratedFeed';
+import AgenticOnboardingFlow from './AgenticOnboardingFlow';
 import { 
   fetchChatHistoryFromSupabase, 
   saveChatMessageToSupabase, 
@@ -504,6 +505,9 @@ export default function AppLayout({ currentUser, onLogout }) {
                     Your prefrontal cortex is rested. Today is ideal for deep learning matrices and neural structures.
                   </p>
                 </div>
+
+                {/* AGENTIC ONBOARDING & EMBEDDED MEDIA FEED FLOW */}
+                <AgenticOnboardingFlow isDarkMode={isDarkMode} />
 
                 {/* PROMINENT AI CURATED FEED SECTION */}
                 <CuratedFeed isDarkMode={isDarkMode} />
