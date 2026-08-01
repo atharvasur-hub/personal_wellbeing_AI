@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import sqlite3
 try:
     import google.generativeai as genai
 except ImportError:
@@ -328,46 +329,33 @@ class RoadmapNodeItem(BaseModel):
 # ═══════════════════════════════════════════════════════════════
 
 CHAT_SYSTEM_PROMPT = """
-You are Synapse AI — an elite personal growth and wellbeing AI assistant.
-Your role is to help the user achieve their goals, improve focus, manage habits, and accelerate learning.
-Tone: supportive, precise, motivating, and high-tech.
-Keep responses concise (3-5 sentences max unless the user asks for detail).
-Always tie your advice directly to the user's stated goals and wellbeing.
+You are Synapse AI — an expert AI coding, technical learning, and personal growth assistant.
+MANDATORY ACCURACY RULES:
+1. ALWAYS ANSWER THE USER'S SPECIFIC QUESTION OR QUERY DIRECTLY, ACCURATELY, AND PRECISELY FIRST.
+2. Provide clean, syntactically correct, production-grade code snippets when asked programming or technical questions.
+3. Provide exact facts and concise, well-structured markdown explanations. Never dodge or redirect away from the user's explicit request.
+4. Use standard markdown for code blocks (```language ... ```), inline code (`code`), bold text, and bullet lists.
 """.strip()
 
 def _get_user_profile_context(user_id: str) -> str:
     profile = in_memory_db["user_profiles"].get(user_id)
     deep_skill = in_memory_db["user_deep_skills"].get(user_id)
     
-    name = profile.get("name") if profile else None
-    role = profile.get("role") if profile else None
-    aspiration = profile.get("aspiration") if profile else None
-    skills = deep_skill.get("skills") if deep_skill else None
-    condition = deep_skill.get("condition") if deep_skill else None
-
-    # Fallback to defaults
-    if not name or not role or not aspiration:
-        name = name or "Atharva Sur"
-        role = role or "Growth Catalyst • Tier 3"
-        aspiration = aspiration or "Senior AI Architect"
+    name = profile.get("name") if profile else "Atharva Sur"
+    role = profile.get("role") if profile else "Growth Catalyst • Tier 3"
+    aspiration = profile.get("aspiration") if profile else "Senior AI Architect"
+    skills = deep_skill.get("skills") if deep_skill else ["Systems Architecture", "Deep Work Endurance", "AI Alignment & Safety"]
+    condition = deep_skill.get("condition") if deep_skill else "Deep Skill Focus"
     
-    skills_str = ", ".join(skills) if skills else "Systems Architecture, Deep Work Endurance, AI Alignment & Safety"
-    condition_str = condition or "Deep Skill Focus"
+    skills_str = ", ".join(skills)
     
-    context = (
-        f"User Session Information:\n"
-        f"- Name: {name}\n"
-        f"- Current Role: {role}\n"
-        f"- Career Goal/Aspiration: {aspiration}\n"
-        f"- Target Skills: {skills_str}\n"
-        f"- Current Condition: {condition_str}\n\n"
-        f"IMPORTANT GUIDANCE RULES FOR SYNAPSE AI:\n"
-        f"1. You are the 'brain' of the project. You must actively guide the user to bridge the gap between their current role ({role}) and their career goal ({aspiration}).\n"
-        f"2. Tailor your responses to focus on their target skills ({skills_str}).\n"
-        f"3. Incorporate their energy state/condition ({condition_str}) into recommendations. If they are burned out or seeking balance, advise recovery or time-boxing. If they are in deep focus, suggest intense, structured study sprints.\n"
-        f"4. Proactively prompt them with micro-steps they can take today to move closer to their goal."
+    return (
+        f"User Profile Context:\n"
+        f"- User Name: {name}\n"
+        f"- Target Goal: {aspiration}\n"
+        f"- Core Skills: {skills_str}\n"
+        f"- Current Energy Condition: {condition}\n"
     )
-    return context
 
 
 def _generate_smart_fallback(user_msg: str, user_id: str) -> str:
@@ -377,89 +365,113 @@ def _generate_smart_fallback(user_msg: str, user_id: str) -> str:
 
     if any(k in msg for k in ["python", "pip", "django", "fastapi", "flask", "code", "script"]):
         return (
-            "🐍 **Python & Backend Engineering Blueprint:**\n\n"
-            "1. **Core Language & Paradigms:**\n"
-            "   - Data structures: Dicts, Sets, Generators, List Comprehensions\n"
-            "   - Async Programming: `asyncio`, `async/await`, Event Loops\n"
-            "   - Type Hints & Validation: `pydantic`, `dataclasses`, `mypy`\n\n"
-            "2. **API & Database Integration:**\n"
-            "   - Frameworks: FastAPI for async high performance or Django for full-stack\n"
-            "   - ORMs & DBs: SQLAlchemy / Supabase PostgreSQL / SQLite\n\n"
-            "3. **Testing & Deployment:**\n"
-            "   - `pytest` for unit/integration tests, Docker for containerization\n\n"
-            "💡 *Tip: Test your FastAPI endpoints right here in Synapse AI!*"
+            "🐍 **Python Technical Solution & Best Practices:**\n\n"
+            "```python\n"
+            "# Production-grade Async FastAPI Endpoint Example\n"
+            "from fastapi import FastAPI, HTTPException\n"
+            "from pydantic import BaseModel, Field\n"
+            "from typing import List, Optional\n\n"
+            "app = FastAPI(title='High Performance Service')\n\n"
+            "class SkillItem(BaseModel):\n"
+            "    name: str = Field(..., example='Async Architecture')\n"
+            "    score: int = Field(default=95, ge=0, le=100)\n\n"
+            "@app.post('/api/v1/skills')\n"
+            "async def register_skill(item: SkillItem):\n"
+            "    # Asynchronous database or service handler\n"
+            "    return {'status': 'success', 'data': item.dict()}\n"
+            "```\n\n"
+            "**Key Architecture Highlights:**\n"
+            "1. **Type Safety:** Pydantic schemas enforce runtime validation.\n"
+            "2. **Non-Blocking I/O:** `async def` handles concurrent connections smoothly.\n"
+            "3. **Automatic Docs:** Swagger UI is auto-generated at `/docs`."
         )
     elif any(k in msg for k in ["react", "frontend", "javascript", "js", "typescript", "ts", "css", "tailwind", "vite", "next"]):
         return (
-            "⚡ **Frontend & React Architecture Mastery:**\n\n"
-            "1. **State Management & Hooks:**\n"
-            "   - Master `useState`, `useReducer`, and Context API for global state.\n"
-            "   - Manage side effects and cleanup timers in `useEffect`.\n\n"
-            "2. **Performance Optimization:**\n"
-            "   - Leverage `useMemo` and `useCallback` to prevent unnecessary re-renders.\n"
-            "   - Code-split large bundles using `React.lazy()` and `Suspense`.\n\n"
-            "3. **Modern Styling & Curation:**\n"
-            "   - Build glassmorphism components with Tailwind CSS & Framer Motion.\n\n"
-            "🎯 *Try the **Active Recall** module in Profile to test your React knowledge!*"
+            "⚡ **React & Modern Frontend Solution:**\n\n"
+            "```jsx\n"
+            "import React, { useState, useEffect, useCallback } from 'react';\n\n"
+            "export default function DataFetcher({ endpoint }) {\n"
+            "  const [data, setData] = useState(null);\n"
+            "  const [loading, setLoading] = useState(true);\n\n"
+            "  const fetchData = useCallback(async () => {\n"
+            "    try {\n"
+            "      const res = await fetch(endpoint);\n"
+            "      const result = await res.json();\n"
+            "      setData(result);\n"
+            "    } finally {\n"
+            "      setLoading(false);\n"
+            "    }\n"
+            "  }, [endpoint]);\n\n"
+            "  useEffect(() => {\n"
+            "    fetchData();\n"
+            "  }, [fetchData]);\n\n"
+            "  if (loading) return <div className=\"animate-pulse text-slate-400\">Loading...</div>;\n"
+            "  return <pre className=\"p-4 bg-slate-900 rounded-xl text-emerald-400\">{JSON.stringify(data, null, 2)}</pre>;\n"
+            "}\n"
+            "```\n\n"
+            "**Best Practices:**\n"
+            "- Wrap handlers in `useCallback` to prevent re-creation on render.\n"
+            "- Handle loading & error UI explicitly."
         )
     elif any(k in msg for k in ["ml", "machine learning", "ai", "deep learning", "pytorch", "tensorflow", "transformer", "llm", "rag", "neural"]):
         return (
-            "🎯 **Machine Learning & AI Architect Roadmap:**\n\n"
-            "1. **Foundations (Math & Python):**\n"
-            "   - Linear Algebra, Probability & Calculus\n"
-            "   - NumPy, Pandas, Scikit-Learn\n\n"
-            "2. **Deep Learning Frameworks:**\n"
-            "   - Neural Networks, Backpropagation, PyTorch Tensors\n"
-            "   - CNNs, Transformers (Attention Mechanism), Loss functions\n\n"
-            "3. **Production AI & MLOps:**\n"
-            "   - Vector DBs (ChromaDB, Pinecone), LangChain / LlamaIndex RAG\n"
-            "   - Model Deployment via FastAPI & Docker, Fine-Tuning (LoRA)\n\n"
-            "💡 *Check your **Journey Map** to track interactive ML skill milestones!*"
+            "🎯 **Deep Learning & PyTorch Tensor Pipeline:**\n\n"
+            "```python\n"
+            "import torch\n"
+            "import torch.nn as nn\n\n"
+            "# Modular Neural Network Block\n"
+            "class ResidualBlock(nn.Module):\n"
+            "    def __init__(self, channels):\n"
+            "        super().__init__()\n"
+            "        self.conv = nn.Sequential(\n"
+            "            nn.Conv2d(channels, channels, kernel_size=3, padding=1),\n"
+            "            nn.BatchNorm2d(channels),\n"
+            "            nn.ReLU(),\n"
+            "            nn.Conv2d(channels, channels, kernel_size=3, padding=1),\n"
+            "            nn.BatchNorm2d(channels)\n"
+            "        )\n"
+            "        self.relu = nn.ReLU()\n\n"
+            "    def forward(self, x):\n"
+            "        return self.relu(x + self.conv(x))\n"
+            "```\n\n"
+            "**ML Architecture Insights:**\n"
+            "- **Skip Connections:** Mitigates vanishing gradient in deep models.\n"
+            "- **Batch Normalization:** Stabilizes distribution shifts during training."
         )
     elif any(k in msg for k in ["system design", "microservice", "architecture", "scale", "redis", "kafka", "database", "sql", "nosql"]):
         return (
-            "🏗️ **System Design & Distributed Scalability Principles:**\n\n"
-            "1. **Decoupling & Async Messaging:** Use RabbitMQ / Kafka to decouple heavy workers.\n"
-            "2. **Caching Strategy:** Place Redis read-through cache to relieve database load.\n"
-            "3. **Database Scaling:** Read replicas, sharding, and indexing strategy.\n"
-            "4. **Load Balancing:** NGINX / ALB with health checks and circuit breakers.\n\n"
-            "What specific tier or component would you like to dive into next?"
+            "🏗️ **System Design & Distributed Architecture:**\n\n"
+            "1. **Read/Write Decoupling:**\n"
+            "   - Use **Redis** in front of PostgreSQL as a read-through cache (TTL 5 mins).\n"
+            "2. **Event-Driven Pipeline:**\n"
+            "   - Publish state events to **Kafka** / RabbitMQ queues for async processing.\n"
+            "3. **Database Sharding & Indexing:**\n"
+            "   - Use composite B-Tree indexes on `(user_id, created_at)` for sub-10ms range queries.\n"
+            "4. **API Gateway:**\n"
+            "   - Deploy NGINX or Envoy with Token Bucket rate limiting."
         )
     elif any(k in msg for k in ["tired", "exhaust", "burnout", "stress", "anxious", "rest", "sleep", "break", "fatigue", "guardian"]):
         return (
-            "🌿 **Well-Being & Recovery Protocol Activated:**\n\n"
-            "1. **Cognitive Reset:** Take a 10-minute non-screen break to clear prefrontal cortex fatigue.\n"
-            "2. **Box Breathing:** Inhale for 4s, hold for 4s, exhale for 4s, hold for 4s (3 cycles).\n"
-            "3. **Hydration & Eye Relief:** Drink 300ml water and follow the 20-20-20 visual distance rule.\n\n"
-            "🛡️ *Would you like me to initiate a 15-minute restorative Focus Sprint block?*"
+            "🌿 **Well-Being & Recovery Protocol:**\n\n"
+            "1. **Cognitive Reset:** 10-minute non-screen break to flush cortical strain.\n"
+            "2. **Box Breathing:** Inhale 4s, Hold 4s, Exhale 4s, Hold 4s (repeat 4 cycles).\n"
+            "3. **Hydration & Visuals:** Drink 300ml water and apply 20-20-20 visual rest."
         )
     elif any(k in msg for k in ["focus", "sprint", "habit", "pomodoro", "work"]):
         return (
-            "🔥 **Deep Work Focus Protocol:**\n\n"
-            "- **Block Length:** 50 minutes deep focus + 10 minutes non-screen recovery.\n"
-            "- **Pre-Sprint Habit:** Eliminate notification vectors & define your single core deliverable.\n"
-            "- **Neural State:** High prefrontal cortical engagement.\n\n"
-            "⏱️ *Head to the **Focus Room** tab to start your timed sprint countdown with ambient acoustics!*"
-        )
-    elif any(k in msg for k in ["hi", "hello", "hey", "greetings", "start"]):
-        return (
-            "Greetings! I am your **Synapse AI Growth Architect**.\n\n"
-            "I'm here to guide you toward your mastery goals with structured learning roadmaps, active recall quizzes, and personalized well-being tracking.\n\n"
-            "How can I assist your progression today?\n"
-            "- **Skill Roadmap**: Ask about Python, React, AI/ML, or System Design\n"
-            "- **Deep Work**: Ask to start a Focus Sprint or recover from fatigue"
+            "🔥 **Deep Work Sprint Protocol:**\n\n"
+            "- **Sprint Duration:** 50 minutes uninterrupted focus + 10 minutes recovery.\n"
+            "- **Environment:** Zero phone notifications, single tab open.\n"
+            "- **Goal:** Deliver one core sub-feature milestone."
         )
     else:
-        clean_prompt = user_msg
-        if clean_prompt.startswith("[") and "]" in clean_prompt:
-            clean_prompt = clean_prompt.split("]", 1)[1].strip()
         return (
-            f"🧠 **Synapse AI Strategic Guidance:**\n\n"
-            f"Regarding your query on **\"{clean_prompt}\"**:\n\n"
-            "1. **Key Insight:** Break down this objective into 3 actionable milestones: Foundations, Practical Execution, and Optimization.\n"
-            "2. **Recommended Action:** Focus on a 25-minute deep focus sprint to construct a minimal working demo or notes draft.\n"
-            "3. **Next Micro-Step:** Check your **Journey Map** and **Curated Media** feed for targeted learning resources.\n\n"
-            "Feel free to specify a technology or area you'd like to explore deeper!"
+            f"🧠 **Direct Technical & Strategic Response:**\n\n"
+            f"Regarding your query **\"{user_msg}\"**:\n\n"
+            "1. **Analysis:** Identify core requirements and decompose into modular steps.\n"
+            "2. **Implementation:** Start with a minimal reproducible proof-of-concept.\n"
+            "3. **Validation:** Add unit tests & profile performance bounds.\n\n"
+            "Let me know if you need code snippets or architecture diagrams for a specific tech stack!"
         )
 
 
@@ -468,25 +480,42 @@ async def chat(req: ChatRequest):
     """Chatbot endpoint — powered by Gemini 2.0 Flash / 1.5 Flash."""
     user_id = req.user_id or "usr_default"
 
+    raw_message = (req.message or "").strip()
+    persona_tag = ""
+    clean_message = raw_message
+
+    if raw_message.startswith("[") and "]" in raw_message:
+        parts = raw_message.split("]", 1)
+        persona_tag = parts[0].strip("[]")
+        clean_message = parts[1].strip()
+
     profile_context = _get_user_profile_context(user_id)
 
-    context = "\n".join(
-        f"{'User' if m.get('role') == 'user' else 'Synapse AI'}: {m.get('text') or m.get('content', '')}"
-        for m in req.history[-6:]
-    )
-    prompt = f"{CHAT_SYSTEM_PROMPT}\n\n{profile_context}\n\n"
+    history_lines = []
+    for m in req.history[-6:]:
+        role_label = "User" if m.get("role") == "user" else "Synapse AI"
+        text_content = m.get("text") or m.get("content") or ""
+        if text_content.startswith("[") and "]" in text_content:
+            text_content = text_content.split("]", 1)[1].strip()
+        history_lines.append(f"{role_label}: {text_content}")
+
+    context = "\n".join(history_lines)
+
+    persona_instruction = f"Current Persona Role: {persona_tag}\n" if persona_tag else ""
+
+    prompt = f"{CHAT_SYSTEM_PROMPT}\n\n{persona_instruction}{profile_context}\n\n"
     if context:
-        prompt += f"Conversation context:\n{context}\n\n"
-    prompt += f"User: {req.message}\nSynapse AI:"
+        prompt += f"Recent Conversation History:\n{context}\n\n"
+    prompt += f"User Question: {clean_message}\n\nSynapse AI (Direct, accurate answer):"
 
     reply_text = _generate_gemini(prompt)
 
     if not reply_text:
-        reply_text = _generate_smart_fallback(req.message, user_id)
+        reply_text = _generate_smart_fallback(clean_message, user_id)
 
-    suggestions = _build_suggestions(req.message)
+    suggestions = _build_suggestions(clean_message)
 
-    _record_chat_message(user_id, "user", req.message)
+    _record_chat_message(user_id, "user", raw_message)
     _record_chat_message(user_id, "assistant", reply_text, suggestions)
 
     return ChatResponse(reply=reply_text, suggestions=suggestions)
@@ -1448,10 +1477,9 @@ def _build_suggestions(prompt: str) -> List[str]:
     if any(k in p for k in ["tired", "sleep", "energy", "burnout"]):
         return ["View sleep protocol", "Log energy baseline", "Start recovery sprint"]
     return ["Analyse my aspiration gap", "Generate a focus sprint", "Curate 4 resources"]
-=======
+
 class TutorRequest(BaseModel):
     topic: str
->>>>>>> 32654a28b8b674df1fa03a98acb2c4b60e743c07
 
 @app.get("/")
 def read_root():

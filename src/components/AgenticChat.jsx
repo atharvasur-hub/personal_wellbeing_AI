@@ -253,10 +253,9 @@ export default function AgenticChat() {
 
   const AgentIcon = activeAgent.icon;
 
-  // Inline styling parser for markdown bullet lists inside chat bubbles
-  const renderMessageContent = (text) => {
-    // Basic replacements for bolding and bullet list styling
-    return text.split('\n').map((line, idx) => {
+  // High-accuracy Markdown parser for code blocks, inline code, bolding, and bullet lists
+  const renderFormattedTextLines = (textChunk) => {
+    return textChunk.split('\n').map((line, idx) => {
       let content = line;
       let isBullet = false;
 
@@ -268,17 +267,27 @@ export default function AgenticChat() {
         isBullet = true;
       }
 
-      // Replace bold syntax **text** with standard React JSX bold tags
-      const boldParts = content.split(/\*\*(.*?)\*\*/g);
-      const parsedText = boldParts.map((part, partIdx) => 
-        partIdx % 2 === 1 ? <strong key={partIdx} className="font-bold text-white">{part}</strong> : part
-      );
+      // Process inline code `code` and bold **text**
+      const inlineCodeParts = content.split(/`(.*?)`/g);
+      const parsedText = inlineCodeParts.map((part, partIdx) => {
+        if (partIdx % 2 === 1) {
+          return (
+            <code key={partIdx} className="bg-slate-800 text-emerald-300 font-mono text-xs px-1.5 py-0.5 rounded border border-white/10">
+              {part}
+            </code>
+          );
+        }
+        const boldParts = part.split(/\*\*(.*?)\*\*/g);
+        return boldParts.map((bPart, bIdx) =>
+          bIdx % 2 === 1 ? <strong key={bIdx} className="font-bold text-white">{bPart}</strong> : bPart
+        );
+      });
 
       if (isBullet) {
         return (
           <div key={idx} className="flex gap-2 ml-4 my-1">
-            <span className="text-emerald-400">•</span>
-            <div className="flex-1">{parsedText}</div>
+            <span className="text-emerald-400 font-bold">•</span>
+            <div className="flex-1 leading-relaxed">{parsedText}</div>
           </div>
         );
       }
@@ -289,6 +298,37 @@ export default function AgenticChat() {
         </p>
       );
     });
+  };
+
+  const renderMessageContent = (text) => {
+    if (!text) return null;
+
+    // Check for code blocks ```
+    if (text.includes('```')) {
+      const parts = text.split(/(```[\s\S]*?```)/g);
+      return parts.map((part, idx) => {
+        if (part.startsWith('```')) {
+          const match = part.match(/^```(\w+)?\n?([\s\S]*?)```$/);
+          const lang = match ? match[1] || '' : '';
+          const codeContent = match ? match[2] : part.slice(3, -3);
+          return (
+            <div key={idx} className="my-3 rounded-xl bg-slate-950 border border-white/10 overflow-hidden font-mono text-xs shadow-lg">
+              {lang && (
+                <div className="px-3 py-1 bg-white/5 border-b border-white/5 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                  {lang}
+                </div>
+              )}
+              <pre className="p-3 text-emerald-300 overflow-x-auto whitespace-pre leading-relaxed">
+                <code>{codeContent.trim()}</code>
+              </pre>
+            </div>
+          );
+        }
+        return <div key={idx}>{renderFormattedTextLines(part)}</div>;
+      });
+    }
+
+    return renderFormattedTextLines(text);
   };
 
   return (
