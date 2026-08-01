@@ -45,6 +45,8 @@ export default function AuthPage({ onLoginSuccess }) {
         setErrorMsg(error);
       } else {
         setSuccessMsg('Account created successfully! Logging you in...');
+        localStorage.setItem('synapse_new_login_prompt', 'true');
+        localStorage.removeItem('synapse_onboarding_completed');
         setTimeout(() => {
           onLoginSuccess({
             email: user?.email || email,
@@ -61,6 +63,8 @@ export default function AuthPage({ onLoginSuccess }) {
         setErrorMsg(error);
       } else {
         setSuccessMsg('Authentication successful!');
+        localStorage.setItem('synapse_new_login_prompt', 'true');
+        localStorage.removeItem('synapse_onboarding_completed');
         setTimeout(() => {
           onLoginSuccess({
             email: user?.email || email,
@@ -101,6 +105,8 @@ export default function AuthPage({ onLoginSuccess }) {
   const handleSelectGoogleAccount = (acc) => {
     setShowGoogleAccountModal(false);
     setSuccessMsg(`Logged in as ${acc.name} (${acc.email})`);
+    localStorage.setItem('synapse_new_login_prompt', 'true');
+    localStorage.removeItem('synapse_onboarding_completed');
     setTimeout(() => {
       onLoginSuccess({
         email: acc.email,
