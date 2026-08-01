@@ -3,7 +3,6 @@ import AuthPage from './components/AuthPage';
 import AppLayout from './components/AppLayout';
 import AspirationSetupScreen from './components/AspirationSetupScreen';
 import { getCurrentUser, signOutUser, subscribeToAuthState } from './lib/supabaseClient';
-import Dashboard from './pages/dashboard';
 
 const DEFAULT_USER = {
   id: 'usr_default',
@@ -102,7 +101,13 @@ function App() {
 
   return (
     <>
-      <Dashboard />
+      {!currentUser ? (
+        <AuthPage onLoginSuccess={handleLoginSuccess} />
+      ) : showAspirationSetup ? (
+        <AspirationSetupScreen currentUser={currentUser} onComplete={handleAspirationComplete} />
+      ) : (
+        <AppLayout currentUser={currentUser} onLogout={handleLogout} />
+      )}
     </>
   );
 }
