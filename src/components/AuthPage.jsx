@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
+import { User, Lock, Mail, ArrowRight, AlertCircle, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { signUpWithEmail, signInWithEmail, signInWithGoogle } from '../lib/supabaseClient';
 
 export default function AuthPage({ onLoginSuccess }) {
@@ -7,39 +7,62 @@ export default function AuthPage({ onLoginSuccess }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  
   const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
+    setSuccessMsg('');
+
+    // Input Validation
+    if (!email || !email.includes('@')) {
+      setErrorMsg('Please enter a valid email address.');
+      return;
+    }
+    if (!password || password.length < 6) {
+      setErrorMsg('Password must be at least 6 characters long.');
+      return;
+    }
+
     setLoading(true);
 
     if (isSignUpMode) {
+      // Sign Up Flow
       const { user, error } = await signUpWithEmail(email, password, name || 'Atharva Sur');
       setLoading(false);
 
       if (error) {
         setErrorMsg(error);
       } else {
-        onLoginSuccess({
-          email: user?.email || email,
-          name: name || 'Atharva Sur',
-          id: user?.id || 'demo_user'
-        });
+        setSuccessMsg('Account created successfully! Logging you in...');
+        setTimeout(() => {
+          onLoginSuccess({
+            email: user?.email || email,
+            name: name || 'Atharva Sur',
+            id: user?.id || 'demo_user_' + Date.now()
+          });
+        }, 1000);
       }
     } else {
+      // Login Flow
       const { user, error } = await signInWithEmail(email, password);
       setLoading(false);
 
       if (error) {
         setErrorMsg(error);
       } else {
-        onLoginSuccess({
-          email: user?.email || email,
-          name: user?.user_metadata?.display_name || email.split('@')[0],
-          id: user?.id || 'demo_user'
-        });
+        setSuccessMsg('Authentication successful!');
+        setTimeout(() => {
+          onLoginSuccess({
+            email: user?.email || email,
+            name: user?.user_metadata?.display_name || email.split('@')[0],
+            id: user?.id || 'demo_user_' + Date.now()
+          });
+        }, 800);
       }
     }
   };
@@ -47,14 +70,19 @@ export default function AuthPage({ onLoginSuccess }) {
   const handleGoogleLogin = async () => {
     setLoading(true);
     setErrorMsg('');
+    setSuccessMsg('');
     const { user, error } = await signInWithGoogle();
     setLoading(false);
+    
     if (!error && user) {
-      onLoginSuccess({
-        email: user.email || 'google.user@gmail.com',
-        name: user.user_metadata?.display_name || user.name || 'Atharva Sur (Google)',
-        id: user.id || 'google_demo_id'
-      });
+      setSuccessMsg('Signed in with Google Account!');
+      setTimeout(() => {
+        onLoginSuccess({
+          email: user.email || 'google.user@gmail.com',
+          name: user.user_metadata?.display_name || user.name || 'Atharva Sur (Google)',
+          id: user.id || 'google_demo_id'
+        });
+      }, 800);
     } else if (error) {
       setErrorMsg(error);
     }
@@ -62,9 +90,9 @@ export default function AuthPage({ onLoginSuccess }) {
 
   const handleGuestLogin = () => {
     onLoginSuccess({
-      email: 'atharva@growth.ai',
-      name: 'Atharva Sur',
-      id: 'guest_user'
+      email: 'guest@growth.ai',
+      name: 'Atharva Sur (Guest)',
+      id: 'guest_user_session'
     });
   };
 
@@ -75,19 +103,32 @@ export default function AuthPage({ onLoginSuccess }) {
       <div className="w-full max-w-md bg-white rounded-3xl p-8 md:p-10 shadow-2xl flex flex-col gap-6 animate-fade-in relative overflow-hidden">
         
         {/* Title Header */}
-        <h2 className="text-3xl font-black text-stone-900 text-center tracking-tight">
-          {isSignUpMode ? 'Sign Up' : 'Login'}
-        </h2>
+        <div className="text-center">
+          <h2 className="text-3xl font-black text-stone-900 tracking-tight">
+            {isSignUpMode ? 'Create Account' : 'Login'}
+          </h2>
+          <p className="text-xs text-stone-400 font-medium mt-1">
+            {isSignUpMode ? 'Enter credentials to register your growth profile' : 'Sign in to access your personal wellbeing workspace'}
+          </p>
+        </div>
+
+        {/* Success Alert Message */}
+        {successMsg && (
+          <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 text-xs font-semibold flex items-center gap-2 animate-fade-in">
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+            <span>{successMsg}</span>
+          </div>
+        )}
 
         {/* Error Alert Message */}
         {errorMsg && (
-          <div className="p-3 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 text-xs font-semibold flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
+          <div className="p-3 rounded-2xl bg-rose-50 border border-rose-100 text-rose-600 text-xs font-semibold flex items-center gap-2 animate-fade-in">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
             <span>{errorMsg}</span>
           </div>
         )}
 
-        {/* Prominent Google OAuth Button */}
+        {/* Prominent Google OAuth Authentication Button */}
         <button
           type="button"
           onClick={handleGoogleLogin}
@@ -109,7 +150,7 @@ export default function AuthPage({ onLoginSuccess }) {
           <div className="flex-1 h-px bg-stone-200" />
         </div>
 
-        {/* Email & Password Form */}
+        {/* Email & Password Authentication Form */}
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           
           {/* Name Field (Sign Up Mode Only) */}
@@ -151,16 +192,23 @@ export default function AuthPage({ onLoginSuccess }) {
           {/* Password Field */}
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold text-stone-400 tracking-wider">Password</label>
-            <div className="flex items-center gap-2 border-b border-stone-200 focus-within:border-fuchsia-500 pb-2 transition">
+            <div className="flex items-center gap-2 border-b border-stone-200 focus-within:border-fuchsia-500 pb-2 transition relative">
               <Lock className="w-4 h-4 text-stone-400 shrink-0" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Type your password"
-                className="w-full text-xs text-stone-800 placeholder-stone-300 focus:outline-none bg-transparent"
+                className="w-full text-xs text-stone-800 placeholder-stone-300 focus:outline-none bg-transparent pr-7"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-0 text-stone-400 hover:text-stone-600 transition cursor-pointer"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
             
             {!isSignUpMode && (
@@ -176,17 +224,18 @@ export default function AuthPage({ onLoginSuccess }) {
             )}
           </div>
 
-          {/* Submit Button */}
+          {/* Submit Action Button */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 mt-2 rounded-full text-white font-black text-xs tracking-widest uppercase bg-gradient-to-r from-cyan-400 via-indigo-500 to-fuchsia-500 shadow-md hover:shadow-lg transition transform active:scale-95 cursor-pointer disabled:opacity-50"
+            className="w-full py-3.5 mt-2 rounded-full text-white font-black text-xs tracking-widest uppercase bg-gradient-to-r from-cyan-400 via-indigo-500 to-fuchsia-500 shadow-md hover:shadow-lg transition transform active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {loading ? 'Processing...' : (isSignUpMode ? 'SIGN UP' : 'LOGIN')}
+            {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+            <span>{loading ? 'Authenticating...' : (isSignUpMode ? 'SIGN UP' : 'LOGIN')}</span>
           </button>
         </form>
 
-        {/* Social Icons Section */}
+        {/* Social Accounts Section */}
         <div className="flex flex-col gap-3">
           <span className="text-[11px] text-stone-400 text-center font-medium">
             {isSignUpMode ? 'Or Sign Up Using Social Accounts' : 'Or Sign In Using Social Accounts'}
@@ -229,7 +278,7 @@ export default function AuthPage({ onLoginSuccess }) {
           </span>
           <button
             type="button"
-            onClick={() => { setIsSignUpMode(!isSignUpMode); setErrorMsg(''); }}
+            onClick={() => { setIsSignUpMode(!isSignUpMode); setErrorMsg(''); setSuccessMsg(''); }}
             className="text-xs font-black text-indigo-600 tracking-wider hover:text-indigo-800 transition uppercase cursor-pointer"
           >
             {isSignUpMode ? 'LOG IN HERE' : 'CREATE SIGN UP ACCOUNT'}
