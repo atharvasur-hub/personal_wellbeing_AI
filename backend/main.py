@@ -26,28 +26,48 @@ from pydantic import BaseModel, Field
 import google.generativeai as genai
 
 # ── Load environment variables ────────────────────────────────
-from dotenv import load_dotenv
-load_dotenv()
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv(usecwd=True))
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or "").strip()
+if GEMINI_API_KEY == "YOUR_GEMINI_API_KEY_HERE":
+    GEMINI_API_KEY = ""
+
 SUPABASE_URL   = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY   = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_ANON_KEY", "")
 
-# ── Configure Gemini ──────────────────────────────────────────
-if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_API_KEY_HERE":
+# ── Configure Gemini Multi-Model Generator ─────────────────────
+def _generate_gemini(prompt: str) -> str:
+    """Configures and attempts Gemini API calls across multiple Flash/Pro models."""
+    key = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or "").strip()
+    if not key or key == "YOUR_GEMINI_API_KEY_HERE":
+        return ""
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        gemini_model = genai.GenerativeModel("gemini-2.0-flash")
+        genai.configure(api_key=key)
+        candidate_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
+        for model_name in candidate_models:
+            try:
+                m = genai.GenerativeModel(model_name)
+                res = m.generate_content(prompt)
+                if res and res.text:
+                    return res.text.strip()
+            except Exception:
+                continue
     except Exception as e:
-        print(f"[FastAPI] Gemini init warning: {e}")
-        gemini_model = None
-else:
-    gemini_model = None
+        print(f"[FastAPI] Gemini call exception: {e}")
+    return ""
+
+gemini_configured = bool(GEMINI_API_KEY)
 
 # ── Configure Supabase (Server-Side Client) ───────────────────
 supabase_client = None
 if SUPABASE_URL and SUPABASE_KEY and "your-supabase" not in SUPABASE_URL:
     try:
+        from supabase import create_client
+        supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    except Exception as e:
+        print(f"[FastAPI] Supabase init warning: {e}")
+        supabase_client = None
         from supabase import create_client
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
     except Exception as e:
@@ -196,36 +216,30 @@ Always tie your advice directly to the user's stated goals and wellbeing.
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
-    """Chatbot endpoint — powered by Gemini 2.0 Flash."""
+    """Chatbot endpoint — powered by Gemini 2.0 Flash / 1.5 Flash."""
     user_id = req.user_id or "usr_default"
 
-    if not gemini_model:
-        reply = "Synapse AI is operating in offline mode. Please add GEMINI_API_KEY to backend/.env to unlock live model responses."
-        suggestions = ["How do I set the API key?", "What can Synapse AI do?", "Start a 25-min focus sprint"]
-        _record_chat_message(user_id, "user", req.message)
-        _record_chat_message(user_id, "assistant", reply, suggestions)
-        return ChatResponse(reply=reply, suggestions=suggestions)
+    context = "\n".join(
+        f"{'User' if m.get('role') == 'user' else 'Synapse AI'}: {m.get('text') or m.get('content', '')}"
+        for m in req.history[-6:]
+    )
+    prompt = f"{CHAT_SYSTEM_PROMPT}\n\n"
+    if context:
+        prompt += f"Conversation context:\n{context}\n\n"
+    prompt += f"User: {req.message}\nSynapse AI:"
 
-    try:
-        context = "\n".join(
-            f"{'User' if m.get('role') == 'user' else 'Synapse AI'}: {m.get('text') or m.get('content', '')}"
-            for m in req.history[-6:]
-        )
-        prompt = f"{CHAT_SYSTEM_PROMPT}\n\n"
-        if context:
-            prompt += f"Conversation context:\n{context}\n\n"
-        prompt += f"User: {req.message}\nSynapse AI:"
+    reply_text = _generate_gemini(prompt)
 
-        response = gemini_model.generate_content(prompt)
-        reply_text = response.text.strip()
+    if not reply_text:
+        reply_text = "Synapse AI is operating in offline mode. Please add your free GEMINI_API_KEY to backend/.env (GEMINI_API_KEY=AIzaSy...) or root .env to unlock live Gemini responses."
+        suggestions = ["Where do I get a free API key?", "How do I set backend/.env?", "What can Synapse AI do?"]
+    else:
         suggestions = _build_suggestions(req.message)
 
-        _record_chat_message(user_id, "user", req.message)
-        _record_chat_message(user_id, "assistant", reply_text, suggestions)
+    _record_chat_message(user_id, "user", req.message)
+    _record_chat_message(user_id, "assistant", reply_text, suggestions)
 
-        return ChatResponse(reply=reply_text, suggestions=suggestions)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Gemini AI Exception: {str(e)}")
+    return ChatResponse(reply=reply_text, suggestions=suggestions)
 
 
 @app.get("/api/chat/history")
@@ -281,12 +295,12 @@ async def recommend(req: GoalRequest):
     """ML Content Curation — returns 4 items (Video, Short, Reel, Article) for a goal."""
     intent = _analyze_intent(req.goal)
 
-    if gemini_model:
-        try:
-            items = await _gemini_recommendations(req.goal)
+    try:
+        items = await _gemini_recommendations(req.goal)
+        if items:
             return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
-        except Exception:
-            pass
+    except Exception:
+        pass
 
     items = _static_recommendations(req.goal)
     return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
@@ -313,8 +327,11 @@ Rules:
 Return ONLY the JSON array.
 """.strip()
 
-    response = gemini_model.generate_content(prompt)
-    raw = response.text.strip().replace("```json", "").replace("```", "").strip()
+    raw_text = _generate_gemini(prompt)
+    if not raw_text:
+        return []
+
+    raw = raw_text.replace("```json", "").replace("```", "").strip()
     parsed = json.loads(raw)
 
     return [
