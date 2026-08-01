@@ -338,37 +338,7 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
               </div>
             </div>
 
-            {/* Dynamic Level Progress Bar */}
-            {(() => {
-              const lvl = parseInt(userLevel) || 1;
-              const xpVal = parseInt((userXP || '0').toString().replace(/,/g, '')) || 0;
-              const maxXP = lvl * 1000;
-              const pct = Math.min(100, Math.round((xpVal / maxXP) * 100));
-              const needed = Math.max(0, maxXP - xpVal);
-              return (
-                <div className={`w-full md:w-72 flex flex-col gap-3 rounded-2xl p-4 border ${
-                  isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-stone-50 border-stone-200'
-                }`}>
-                  <div className={`flex items-center justify-between text-xs font-mono font-bold ${
-                    isDarkMode ? 'text-slate-300' : 'text-stone-700'
-                  }`}>
-                    <span>Level Progression</span>
-                    <span className="text-teal-600 font-bold">{pct}%</span>
-                  </div>
-                  <div className={`w-full h-3 rounded-full overflow-hidden border ${
-                    isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-stone-200 border-stone-300/50'
-                  }`}>
-                    <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-teal-400 to-emerald-400" style={{ width: `${pct}%` }} />
-                  </div>
-                  <div className={`flex items-center justify-between text-[11px] font-mono ${
-                    isDarkMode ? 'text-slate-400' : 'text-stone-500'
-                  }`}>
-                    <span>Next Rank: Level {lvl + 1}</span>
-                    <span className="font-bold">+{needed.toLocaleString()} XP needed</span>
-                  </div>
-                </div>
-              );
-            })()}
+
           </div>
         </div>
 
