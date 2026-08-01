@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Sliders,
   Check,
+  RotateCcw,
   Target
 } from 'lucide-react';
 import { fetchDynamicRoadmapFromBackend } from '../lib/backendApi';
@@ -382,13 +383,12 @@ export default function UserJourneyTimeline({ milestones, isDarkMode = false }) 
     handleSelectRole(customRoleInput.trim());
   };
 
-  // Toggle milestone status (completed -> active -> locked)
-  const handleToggleNodeStatus = (nodeId) => {
+  // Explicit status updater (Done / Undone / Locked)
+  const setNodeStatus = (nodeId, newStatus) => {
     setRoadmapNodes((prevNodes) => {
       const nextNodes = prevNodes.map((node) => {
         if (node.id === nodeId) {
-          const nextStatus = node.status === 'completed' ? 'active' : node.status === 'active' ? 'locked' : 'completed';
-          return { ...node, status: nextStatus };
+          return { ...node, status: newStatus };
         }
         return node;
       });
@@ -397,6 +397,14 @@ export default function UserJourneyTimeline({ milestones, isDarkMode = false }) 
       window.dispatchEvent(new CustomEvent('synapse_roadmap_updated'));
       return nextNodes;
     });
+  };
+
+  // Toggle milestone status (done <-> active <-> locked)
+  const handleToggleNodeStatus = (nodeId) => {
+    const targetNode = roadmapNodes.find(n => n.id === nodeId);
+    if (!targetNode) return;
+    const nextStatus = targetNode.status === 'completed' ? 'active' : targetNode.status === 'active' ? 'locked' : 'completed';
+    setNodeStatus(nodeId, nextStatus);
   };
 
   // Calculate progress stats
@@ -558,8 +566,7 @@ export default function UserJourneyTimeline({ milestones, isDarkMode = false }) 
 
               {/* Node Card */}
               <div 
-                onClick={() => handleToggleNodeStatus(node.id)}
-                className={`w-full p-6 border rounded-3xl transition-all duration-300 cursor-pointer group ${
+                className={`w-full p-6 border rounded-3xl transition-all duration-300 group ${
                 node.status === 'completed'
                   ? isDarkMode
                     ? 'border-emerald-500/40 bg-emerald-950/20 text-slate-100 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
@@ -569,8 +576,8 @@ export default function UserJourneyTimeline({ milestones, isDarkMode = false }) 
                     ? 'border-indigo-500/60 bg-indigo-950/30 text-slate-100 shadow-[0_0_25px_rgba(99,102,241,0.25)] ring-2 ring-indigo-500/30'
                     : 'border-teal-400 bg-teal-50/80 text-stone-900 shadow-md ring-2 ring-teal-400/20'
                   : isDarkMode
-                    ? 'border-slate-800/80 bg-slate-900/30 text-slate-500 opacity-60 hover:opacity-100'
-                    : 'border-stone-200 bg-stone-100/50 text-stone-400 opacity-75 hover:opacity-100'
+                    ? 'border-slate-800/80 bg-slate-900/30 text-slate-500'
+                    : 'border-stone-200 bg-stone-100/50 text-stone-400'
               }`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
@@ -594,7 +601,7 @@ export default function UserJourneyTimeline({ milestones, isDarkMode = false }) 
                         ? isDarkMode ? 'text-emerald-300' : 'text-emerald-900'
                         : node.status === 'active'
                         ? isDarkMode ? 'text-indigo-300' : 'text-teal-900'
-                        : isDarkMode ? 'text-slate-400' : 'text-stone-500'
+                        : isDarkMode ? 'text-slate-300' : 'text-stone-600'
                     }`}>
                       {node.title}
                     </h3>
@@ -606,17 +613,98 @@ export default function UserJourneyTimeline({ milestones, isDarkMode = false }) 
                     </p>
                   </div>
 
-                  {/* Status Indicator Icon */}
-                  <div className="shrink-0 mt-1">
-                    {node.status === 'completed' && <CheckCircle className="text-emerald-500 w-7 h-7" />}
-                    {node.status === 'active' && <PlayCircle className="text-indigo-400 w-7 h-7 animate-bounce" />}
-                    {node.status === 'locked' && <Lock className="text-slate-500 w-6 h-6" />}
+                  {/* Status Indicator Icon & Quick Action */}
+                  <div className="shrink-0 mt-1 flex flex-col items-end gap-2">
+                    {node.status === 'completed' ? (
+                      <button
+                        onClick={() => setNodeStatus(node.id, 'active')}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-rose-500/10 border border-emerald-500/30 hover:border-rose-500/40 text-emerald-500 hover:text-rose-500 text-xs font-bold transition cursor-pointer group/btn"
+                        title="Click to mark as Undone (In Progress)"
+                      >
+                        <CheckCircle className="w-4 h-4 text-emerald-500 group-hover/btn:hidden" />
+                        <RotateCcw className="w-4 h-4 hidden group-hover/btn:block text-rose-500" />
+                        <span className="group-hover/btn:hidden">Completed</span>
+                        <span className="hidden group-hover/btn:inline">Mark Undone</span>
+                      </button>
+                    ) : node.status === 'active' ? (
+                      <button
+                        onClick={() => setNodeStatus(node.id, 'completed')}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-500 text-white font-bold text-xs shadow-xs hover:bg-teal-600 transition cursor-pointer animate-pulse"
+                        title="Click to mark as Done"
+                      >
+                        <Check className="w-4 h-4" />
+                        <span>Mark Done</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setNodeStatus(node.id, 'completed')}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
+                          isDarkMode
+                            ? 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-teal-500 hover:text-white'
+                            : 'bg-white border-stone-200 text-stone-600 hover:bg-teal-500 hover:text-white'
+                        }`}
+                        title="Click to mark as Done"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Mark Done</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Explicit Status Selector Buttons */}
+                <div className={`mt-4 pt-3 border-t flex flex-wrap items-center justify-between gap-2 ${
+                  isDarkMode ? 'border-slate-800/80' : 'border-stone-200/60'
+                }`}>
+                  <span className={`text-[10px] font-mono uppercase tracking-wider ${isDarkMode ? 'text-slate-400' : 'text-stone-400'}`}>
+                    Change Node Status:
+                  </span>
+
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => setNodeStatus(node.id, 'completed')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                        node.status === 'completed'
+                          ? 'bg-emerald-500 text-white border-emerald-400 shadow-2xs'
+                          : isDarkMode
+                          ? 'bg-slate-950 border-slate-800 text-slate-400 hover:text-emerald-400'
+                          : 'bg-stone-50 border-stone-200 text-stone-500 hover:text-emerald-600'
+                      }`}
+                    >
+                      ✓ Completed
+                    </button>
+
+                    <button
+                      onClick={() => setNodeStatus(node.id, 'active')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                        node.status === 'active'
+                          ? 'bg-indigo-500 text-white border-indigo-400 shadow-2xs'
+                          : isDarkMode
+                          ? 'bg-slate-950 border-slate-800 text-slate-400 hover:text-indigo-400'
+                          : 'bg-stone-50 border-stone-200 text-stone-500 hover:text-indigo-600'
+                      }`}
+                    >
+                      ▶ Active
+                    </button>
+
+                    <button
+                      onClick={() => setNodeStatus(node.id, 'locked')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                        node.status === 'locked'
+                          ? 'bg-slate-700 text-white border-slate-600 shadow-2xs'
+                          : isDarkMode
+                          ? 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                          : 'bg-stone-50 border-stone-200 text-stone-500 hover:text-stone-800'
+                      }`}
+                    >
+                      🔒 Locked
+                    </button>
                   </div>
                 </div>
 
                 {/* Active Accordion Expansion */}
                 {node.status === 'active' && (
-                  <div className={`mt-5 pt-4 border-t flex flex-col gap-3 ${isDarkMode ? 'border-indigo-500/20' : 'border-teal-200'}`}>
+                  <div className={`mt-4 pt-3 border-t flex flex-col gap-3 ${isDarkMode ? 'border-indigo-500/20' : 'border-teal-200'}`}>
                     <button
                       onClick={(e) => { e.stopPropagation(); setActiveCheckIn(!activeCheckIn); }}
                       className={`w-full py-3 px-5 rounded-2xl font-extrabold text-xs tracking-wide transition flex items-center justify-center gap-2 shadow-sm hover:shadow-md cursor-pointer ${
