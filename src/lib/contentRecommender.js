@@ -2,11 +2,20 @@
  * AI-Powered Content Recommender
  * Uses Google Gemini API to generate 4 real, goal-matched content recommendations
  * (1 Video, 1 Short, 1 Reel, 1 Article) based on user's stated goal.
+ *
+ * TO ENABLE LIVE AI RECOMMENDATIONS:
+ *   Open .env → set VITE_GEMINI_API_KEY=your_key_here
+ *   Get a free key at: https://aistudio.google.com/app/apikey
  */
 import { GoogleGenAI } from '@google/genai';
 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
+const isKeyConfigured =
+  GEMINI_API_KEY &&
+  GEMINI_API_KEY !== 'YOUR_GEMINI_API_KEY_HERE' &&
+  GEMINI_API_KEY.length > 10;
+
+const ai = isKeyConfigured ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 
 // -----------------------------------------------------------------
 // HELPER: Curate 4 static recommendations for a given goal keyword
