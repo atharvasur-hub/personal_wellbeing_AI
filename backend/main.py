@@ -11,7 +11,6 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import sqlite3 # Built-in Python database!
 
 # ── Load environment variables ────────────────────────────────
 from dotenv import load_dotenv, find_dotenv
@@ -141,12 +140,13 @@ app = FastAPI(
     version="2.0.0",
 )
 
+# Enable CORS for frontend communication
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
     allow_credentials=True,
-    allow_methods=["*"], 
-    allow_headers=["*"], 
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # --- 1. Database Setup ---
@@ -1448,52 +1448,35 @@ def _build_suggestions(prompt: str) -> List[str]:
     if any(k in p for k in ["tired", "sleep", "energy", "burnout"]):
         return ["View sleep protocol", "Log energy baseline", "Start recovery sprint"]
     return ["Analyse my aspiration gap", "Generate a focus sprint", "Curate 4 resources"]
+=======
+class TutorRequest(BaseModel):
+    topic: str
+>>>>>>> 32654a28b8b674df1fa03a98acb2c4b60e743c07
 
 @app.get("/")
-async def root():
-    return {"status": "System Online", "message": "FastAPI backend is running."}
+def read_root():
+    return {"status": "online", "message": "Personal Wellbeing AI Backend is running successfully."}
 
-# --- 2. The Signup Endpoint (Saves to DB) ---
-@app.post("/signup")
-async def signup(user: UserSignup):
-    try:
-        conn = sqlite3.connect("users.db")
-        cursor = conn.cursor()
-        # Insert the new user into the database
-        # NOTE: In a real production app, you would hash this password! 
-        cursor.execute("INSERT INTO users (name, email, password) VALUES (?, ?, ?)", 
-                       (user.name, user.email, user.password))
-        conn.commit()
-        conn.close()
-        
-        return {
-            "message": "Identity registered successfully",
-            "access_token": f"token_for_{user.email}",
-            "token_type": "bearer"
-        }
-    except sqlite3.IntegrityError:
-        # This triggers if the email is already in the database
-        raise HTTPException(status_code=400, detail="Identity Vector (Email) already registered.")
-
-# --- 3. The Login Endpoint (Reads from DB) ---
-@app.post("/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    conn = sqlite3.connect("users.db")
-    cursor = conn.cursor()
-    # Look up the user by email
-    cursor.execute("SELECT password FROM users WHERE email = ?", (form_data.username,))
-    result = cursor.fetchone()
-    conn.close()
-
-    # Check if user exists AND if the password matches
-    if not result or result[0] != form_data.password:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Access Denied: Invalid Identity Vector or Security Key",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+@app.post("/api/tutor")
+def ai_tutor(req: TutorRequest):
+    topic_name = req.topic.strip()
+    
+    if not topic_name:
+        raise HTTPException(status_code=400, detail="Topic cannot be empty.")
+    
+    # Clean structured breakdown response tailored for your hackathon presentation
+    explanation = (
+        f"### Breakdown of **{topic_name}**\n\n"
+        f"1. **Core Definition**: {topic_name} is a fundamental concept designed to solve complex structural or logical challenges efficiently.\n"
+        f"2. **Key Components**: \n"
+        f"   - Principle structure and initial setup.\n"
+        f"   - Execution flow and state handling.\n"
+        f"   - Error management and optimization.\n"
+        f"3. **Practical Real-World Example**: Think of it like organizing a system pipeline where inputs are automatically validated, processed sequentially, and outputted securely."
+    )
     
     return {
-        "access_token": f"token_for_{form_data.username}", 
-        "token_type": "bearer"
+        "success": True,
+        "topic": topic_name,
+        "explanation": explanation
     }

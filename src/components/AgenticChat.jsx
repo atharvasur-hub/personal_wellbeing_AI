@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, User, Sparkles, Brain, Shield, ArrowDown, Trash2, Mic, MicOff } from 'lucide-react';
+import { Send, User, Sparkles, Brain, Shield, ArrowDown, Trash2 } from 'lucide-react';
 
 // MOCK ADVISORY SYSTEM
 const AGENT_PERSONAS = {
@@ -48,12 +48,9 @@ function useMockChat(activeAgent) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isListening, setIsListening] = useState(false);
   const streamIntervalRef = useRef(null);
-  const recognitionRef = useRef(null);
 
-  // Initialize with agent welcome message and Speech Recognition
+  // Initialize with agent welcome message
   useEffect(() => {
     setMessages([
       {
@@ -64,43 +61,7 @@ function useMockChat(activeAgent) {
         agentId: activeAgent.id
       }
     ]);
-    
-    // Setup Speech Recognition
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition && !recognitionRef.current) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
-
-      recognition.onstart = () => setIsListening(true);
-      recognition.onend = () => setIsListening(false);
-      recognition.onerror = (event) => {
-        console.error("Speech recognition error", event.error);
-        setIsListening(false);
-      };
-      recognition.onresult = (event) => {
-        const transcript = Array.from(event.results)
-          .map(result => result[0])
-          .map(result => result.transcript)
-          .join('');
-        setInput(transcript);
-      };
-      recognitionRef.current = recognition;
-    }
   }, [activeAgent]);
-
-  const toggleListening = () => {
-    if (isListening) {
-      recognitionRef.current?.stop();
-    } else {
-      if (recognitionRef.current) {
-        recognitionRef.current.start();
-      } else {
-        alert("Speech recognition is not supported in this browser.");
-      }
-    }
-  };
 
   const handleInputChange = (e) => {
     setInput(e.target.value);
@@ -181,7 +142,6 @@ function useMockChat(activeAgent) {
     } catch (err) {
       console.warn('AI Agent request fallback:', err.message);
     }
-    
     // Speak the response text safely
     try {
       if (window.speechSynthesis) {
@@ -249,17 +209,14 @@ function useMockChat(activeAgent) {
     handleInputChange,
     handleSubmit,
     isLoading,
-    clearChat,
-    isSpeaking,
-    isListening,
-    toggleListening
+    clearChat
   };
 }
 
 export default function AgenticChat() {
   const [selectedAgentId, setSelectedAgentId] = useState('architect');
   const activeAgent = AGENT_PERSONAS[selectedAgentId];
-  const { messages, input, setInput, handleInputChange, handleSubmit, isLoading, clearChat, isSpeaking, isListening, toggleListening } = useMockChat(activeAgent);
+  const { messages, input, setInput, handleInputChange, handleSubmit, isLoading, clearChat } = useMockChat(activeAgent);
   
   const chatEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -346,14 +303,6 @@ export default function AgenticChat() {
           <div>
             <h3 className="flex items-center gap-2 font-bold text-sm text-slate-100">
               {activeAgent.name}
-              {isSpeaking && (
-                <span className="flex items-center gap-1">
-                  <div className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
-                  <div className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse delay-75" />
-                  <div className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse delay-150" />
-                  <span className="text-[10px] text-emerald-400 font-normal uppercase tracking-wider ml-1">Speaking...</span>
-                </span>
-              )}
             </h3>
             <p className="text-xs text-slate-400 font-medium">{activeAgent.role}</p>
           </div>
@@ -515,18 +464,6 @@ export default function AgenticChat() {
         onSubmit={handleSubmit}
         className="p-3 border-t border-white/5 bg-brand-dark/40 flex gap-2 items-center"
       >
-        <button
-          type="button"
-          onClick={toggleListening}
-          className={`p-2.5 rounded-xl flex items-center justify-center transition shadow-lg ${
-            isListening 
-              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30 animate-pulse' 
-              : 'bg-white/5 text-slate-400 hover:text-slate-200 border border-transparent hover:bg-white/10'
-          }`}
-          title={isListening ? "Stop Listening" : "Start Voice Input"}
-        >
-          {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-        </button>
         <textarea
           value={input}
           onChange={handleInputChange}
