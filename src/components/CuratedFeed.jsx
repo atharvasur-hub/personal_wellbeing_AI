@@ -86,24 +86,43 @@ export default function CuratedFeed({ isDarkMode = false, currentUser = null }) 
   };
 
   useEffect(() => {
-    // Render static fallback, no async API loops
-    setCurrentGoal(getGoalText());
+    let isMounted = true;
 
-    // Custom events and storage event listeners
+    const loadRecommendations = async () => {
+      const goal = getGoalText();
+      if (isMounted) setCurrentGoal(goal);
+      setLoading(true);
+      try {
+        const recs = await fetchAIRecommendations(goal, userId);
+        if (isMounted && recs && recs.length > 0) {
+          setItems(recs);
+        }
+      } catch (err) {
+        console.error("Failed to fetch recommendations:", err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadRecommendations();
+
     const handleUpdate = () => {
-      setCurrentGoal(getGoalText());
+      loadRecommendations();
     };
 
     window.addEventListener('storage', handleUpdate);
     window.addEventListener('aspirationUpdated', handleUpdate);
     window.addEventListener('feedTopicsUpdated', handleUpdate);
     window.addEventListener('quizSubmitted', handleUpdate);
+    window.addEventListener('pointsAwarded', handleUpdate);
 
     return () => {
+      isMounted = false;
       window.removeEventListener('storage', handleUpdate);
       window.removeEventListener('aspirationUpdated', handleUpdate);
       window.removeEventListener('feedTopicsUpdated', handleUpdate);
       window.removeEventListener('quizSubmitted', handleUpdate);
+      window.removeEventListener('pointsAwarded', handleUpdate);
     };
   }, [userId]);
 
