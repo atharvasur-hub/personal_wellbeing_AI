@@ -134,25 +134,31 @@ function useMockChat(activeAgent) {
     setInput('');
     setIsLoading(true);
 
-    // Default template fallback in case Ollama takes time
+    // Dynamic template fallback in case backend is loading/offline
     const query = promptText.toLowerCase();
     let responseTemplate = activeAgent.responses.default;
     
     if (activeAgent.id === 'architect') {
-      if (query.includes('react') || query.includes('component') || query.includes('hook')) {
+      if (query.includes('react') || query.includes('component') || query.includes('hook') || query.includes('frontend')) {
         responseTemplate = activeAgent.responses.react;
-      } else if (query.includes('design') || query.includes('system') || query.includes('scale') || query.includes('architect')) {
+      } else if (query.includes('design') || query.includes('system') || query.includes('scale') || query.includes('architect') || query.includes('redis') || query.includes('kafka')) {
         responseTemplate = activeAgent.responses.design;
-      } else if (query.includes('ml') || query.includes('machine') || query.includes('network') || query.includes('model')) {
+      } else if (query.includes('ml') || query.includes('machine') || query.includes('network') || query.includes('model') || query.includes('ai') || query.includes('pytorch')) {
         responseTemplate = activeAgent.responses.ml;
+      } else if (query.includes('python') || query.includes('fastapi') || query.includes('django') || query.includes('backend') || query.includes('sql') || query.includes('code')) {
+        responseTemplate = "🐍 **Python & Backend Mastery Pathway:**\n\n1. **Core Language:** Async I/O (`asyncio`), Type Hints & Generators.\n2. **Frameworks:** FastAPI for async REST APIs & Pydantic validation schemas.\n3. **Databases:** PostgreSQL / Supabase with SQLAlchemy ORM.\n\n*Action Step: Execute a 25-min sprint in Focus Room to practice async endpoints!*";
+      } else {
+        responseTemplate = `🎯 **Skill Architect Curation Strategy:**\n\nRegarding **"${promptText}"**:\n\n1. **Foundations**: Establish underlying mental models and core syntax.\n2. **Practical Execution**: Build a clean, isolated working module.\n3. **Optimization**: Profile for latency, memory bottlenecks, and scale.\n\n*Check your **Journey Map** to track your interactive skill milestones!*`;
       }
     } else {
-      if (query.includes('tired') || query.includes('exhaust') || query.includes('energy') || query.includes('burnout')) {
+      if (query.includes('tired') || query.includes('exhaust') || query.includes('energy') || query.includes('burnout') || query.includes('sleep') || query.includes('fatigue')) {
         responseTemplate = activeAgent.responses.tired;
-      } else if (query.includes('stress') || query.includes('anxious') || query.includes('worry')) {
+      } else if (query.includes('stress') || query.includes('anxious') || query.includes('worry') || query.includes('overwhelmed') || query.includes('panic')) {
         responseTemplate = activeAgent.responses.stress;
-      } else if (query.includes('focus') || query.includes('distract') || query.includes('flow')) {
+      } else if (query.includes('focus') || query.includes('distract') || query.includes('flow') || query.includes('sprint') || query.includes('work')) {
         responseTemplate = activeAgent.responses.focus;
+      } else {
+        responseTemplate = `🌿 **Well-Being Guardian Guidance:**\n\nRegarding **"${promptText}"**:\n\n1. **Pacing Check**: Ensure you alternate 50-minute focus sprints with 10-minute non-screen recovery.\n2. **Visual Reset**: Follow the **20-20-20 rule** to protect your optical nerve health.\n3. **Hydration**: Drink 300ml of cold water to maintain high neural clarity.\n\n*Would you like to start a guided 1-minute box-breathing cycle right now?*`;
       }
     }
 
@@ -173,27 +179,26 @@ function useMockChat(activeAgent) {
         responseTemplate = text;
       }
     } catch (err) {
-      console.warn('Ollama live agent request fallback:', err.message);
+      console.warn('AI Agent request fallback:', err.message);
     }
     
-    // Stop any current speech
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-    
-    // Speak the response text
-    if (window.speechSynthesis) {
-      const utterance = new SpeechSynthesisUtterance(responseTemplate);
-      // Clean up markdown/symbols for better speech
-      utterance.text = responseTemplate.replace(/[*#_`]/g, '');
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-      
-      window.speechSynthesis.speak(utterance);
+    // Speak the response text safely
+    try {
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(responseTemplate.replace(/[*#_`]/g, ''));
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        
+        utterance.onstart = () => setIsSpeaking(true);
+        utterance.onend = () => setIsSpeaking(false);
+        utterance.onerror = () => setIsSpeaking(false);
+        
+        window.speechSynthesis.speak(utterance);
+      }
+    } catch (speechErr) {
+      console.warn('Speech synthesis non-critical error:', speechErr);
+      setIsSpeaking(false);
     }
 
     const assistantMessageId = Math.random().toString(36).substr(2, 9);

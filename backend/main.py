@@ -1,3 +1,12 @@
+import os
+import json
+import time
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
+
+from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,35 +26,57 @@ SUPABASE_KEY   = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_AN
 
 # ── Configure Gemini Multi-Model Generator ─────────────────────
 def _generate_gemini(prompt: str) -> str:
-    """Configures and attempts Gemini API calls across multiple Flash/Pro models."""
+    """Configures and attempts Gemini API calls across valid Flash/Pro models."""
     key = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or "").strip()
     if not key or key == "YOUR_GEMINI_API_KEY_HERE":
         return ""
+
+    # Strategy 1: Try google.generativeai SDK
+    if genai:
+        try:
+            genai.configure(api_key=key)
+            candidate_models = [
+                "gemini-2.5-flash",
+                "gemini-2.0-flash",
+                "gemini-1.5-flash",
+                "gemini-1.5-pro",
+                "gemini-pro"
+            ]
+            for model_name in candidate_models:
+                try:
+                    m = genai.GenerativeModel(model_name)
+                    res = m.generate_content(prompt)
+                    if res and res.text:
+                        return res.text.strip()
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"[FastAPI] SDK Gemini call exception: {e}")
+
+    # Strategy 2: Direct REST HTTP Call Fallback
     try:
-        genai.configure(api_key=key)
-        candidate_models = [
-            "gemini-2.5-flash",
-            "gemini-3.6-flash",
-            "gemini-2.0-flash",
-            "gemini-flash-latest",
-            "gemini-2.5-pro",
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro"
-        ]
-        for model_name in candidate_models:
-            try:
-                m = genai.GenerativeModel(model_name)
-                res = m.generate_content(prompt)
-                if res and res.text:
-                    return res.text.strip()
-            except Exception:
-                continue
+        import urllib.request
+        import urllib.parse
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}"
+        payload = json.dumps({
+            "contents": [{"parts": [{"text": prompt}]}]
+        }).encode("utf-8")
+
+        req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            candidates = data.get("candidates", [])
+            if candidates:
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if parts and "text" in parts[0]:
+                    return parts[0]["text"].strip()
     except Exception as e:
-        print(f"[FastAPI] Gemini call exception: {e}")
+        print(f"[FastAPI] REST Gemini call exception: {e}")
+
     return ""
 
-gemini_configured = bool(GEMINI_API_KEY)
+gemini_configured = bool(GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_API_KEY_HERE")
 
 # ── Configure Supabase (Server-Side Client) ───────────────────
 supabase_client = None
@@ -112,7 +143,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"], 
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"], 
     allow_headers=["*"], 
@@ -339,12 +370,104 @@ def _get_user_profile_context(user_id: str) -> str:
     return context
 
 
+def _generate_smart_fallback(user_msg: str, user_id: str) -> str:
+    msg = user_msg.lower().strip()
+    if msg.startswith("[") and "]" in msg:
+        msg = msg.split("]", 1)[1].strip()
+
+    if any(k in msg for k in ["python", "pip", "django", "fastapi", "flask", "code", "script"]):
+        return (
+            "🐍 **Python & Backend Engineering Blueprint:**\n\n"
+            "1. **Core Language & Paradigms:**\n"
+            "   - Data structures: Dicts, Sets, Generators, List Comprehensions\n"
+            "   - Async Programming: `asyncio`, `async/await`, Event Loops\n"
+            "   - Type Hints & Validation: `pydantic`, `dataclasses`, `mypy`\n\n"
+            "2. **API & Database Integration:**\n"
+            "   - Frameworks: FastAPI for async high performance or Django for full-stack\n"
+            "   - ORMs & DBs: SQLAlchemy / Supabase PostgreSQL / SQLite\n\n"
+            "3. **Testing & Deployment:**\n"
+            "   - `pytest` for unit/integration tests, Docker for containerization\n\n"
+            "💡 *Tip: Test your FastAPI endpoints right here in Synapse AI!*"
+        )
+    elif any(k in msg for k in ["react", "frontend", "javascript", "js", "typescript", "ts", "css", "tailwind", "vite", "next"]):
+        return (
+            "⚡ **Frontend & React Architecture Mastery:**\n\n"
+            "1. **State Management & Hooks:**\n"
+            "   - Master `useState`, `useReducer`, and Context API for global state.\n"
+            "   - Manage side effects and cleanup timers in `useEffect`.\n\n"
+            "2. **Performance Optimization:**\n"
+            "   - Leverage `useMemo` and `useCallback` to prevent unnecessary re-renders.\n"
+            "   - Code-split large bundles using `React.lazy()` and `Suspense`.\n\n"
+            "3. **Modern Styling & Curation:**\n"
+            "   - Build glassmorphism components with Tailwind CSS & Framer Motion.\n\n"
+            "🎯 *Try the **Active Recall** module in Profile to test your React knowledge!*"
+        )
+    elif any(k in msg for k in ["ml", "machine learning", "ai", "deep learning", "pytorch", "tensorflow", "transformer", "llm", "rag", "neural"]):
+        return (
+            "🎯 **Machine Learning & AI Architect Roadmap:**\n\n"
+            "1. **Foundations (Math & Python):**\n"
+            "   - Linear Algebra, Probability & Calculus\n"
+            "   - NumPy, Pandas, Scikit-Learn\n\n"
+            "2. **Deep Learning Frameworks:**\n"
+            "   - Neural Networks, Backpropagation, PyTorch Tensors\n"
+            "   - CNNs, Transformers (Attention Mechanism), Loss functions\n\n"
+            "3. **Production AI & MLOps:**\n"
+            "   - Vector DBs (ChromaDB, Pinecone), LangChain / LlamaIndex RAG\n"
+            "   - Model Deployment via FastAPI & Docker, Fine-Tuning (LoRA)\n\n"
+            "💡 *Check your **Journey Map** to track interactive ML skill milestones!*"
+        )
+    elif any(k in msg for k in ["system design", "microservice", "architecture", "scale", "redis", "kafka", "database", "sql", "nosql"]):
+        return (
+            "🏗️ **System Design & Distributed Scalability Principles:**\n\n"
+            "1. **Decoupling & Async Messaging:** Use RabbitMQ / Kafka to decouple heavy workers.\n"
+            "2. **Caching Strategy:** Place Redis read-through cache to relieve database load.\n"
+            "3. **Database Scaling:** Read replicas, sharding, and indexing strategy.\n"
+            "4. **Load Balancing:** NGINX / ALB with health checks and circuit breakers.\n\n"
+            "What specific tier or component would you like to dive into next?"
+        )
+    elif any(k in msg for k in ["tired", "exhaust", "burnout", "stress", "anxious", "rest", "sleep", "break", "fatigue", "guardian"]):
+        return (
+            "🌿 **Well-Being & Recovery Protocol Activated:**\n\n"
+            "1. **Cognitive Reset:** Take a 10-minute non-screen break to clear prefrontal cortex fatigue.\n"
+            "2. **Box Breathing:** Inhale for 4s, hold for 4s, exhale for 4s, hold for 4s (3 cycles).\n"
+            "3. **Hydration & Eye Relief:** Drink 300ml water and follow the 20-20-20 visual distance rule.\n\n"
+            "🛡️ *Would you like me to initiate a 15-minute restorative Focus Sprint block?*"
+        )
+    elif any(k in msg for k in ["focus", "sprint", "habit", "pomodoro", "work"]):
+        return (
+            "🔥 **Deep Work Focus Protocol:**\n\n"
+            "- **Block Length:** 50 minutes deep focus + 10 minutes non-screen recovery.\n"
+            "- **Pre-Sprint Habit:** Eliminate notification vectors & define your single core deliverable.\n"
+            "- **Neural State:** High prefrontal cortical engagement.\n\n"
+            "⏱️ *Head to the **Focus Room** tab to start your timed sprint countdown with ambient acoustics!*"
+        )
+    elif any(k in msg for k in ["hi", "hello", "hey", "greetings", "start"]):
+        return (
+            "Greetings! I am your **Synapse AI Growth Architect**.\n\n"
+            "I'm here to guide you toward your mastery goals with structured learning roadmaps, active recall quizzes, and personalized well-being tracking.\n\n"
+            "How can I assist your progression today?\n"
+            "- **Skill Roadmap**: Ask about Python, React, AI/ML, or System Design\n"
+            "- **Deep Work**: Ask to start a Focus Sprint or recover from fatigue"
+        )
+    else:
+        clean_prompt = user_msg
+        if clean_prompt.startswith("[") and "]" in clean_prompt:
+            clean_prompt = clean_prompt.split("]", 1)[1].strip()
+        return (
+            f"🧠 **Synapse AI Strategic Guidance:**\n\n"
+            f"Regarding your query on **\"{clean_prompt}\"**:\n\n"
+            "1. **Key Insight:** Break down this objective into 3 actionable milestones: Foundations, Practical Execution, and Optimization.\n"
+            "2. **Recommended Action:** Focus on a 25-minute deep focus sprint to construct a minimal working demo or notes draft.\n"
+            "3. **Next Micro-Step:** Check your **Journey Map** and **Curated Media** feed for targeted learning resources.\n\n"
+            "Feel free to specify a technology or area you'd like to explore deeper!"
+        )
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     """Chatbot endpoint — powered by Gemini 2.0 Flash / 1.5 Flash."""
     user_id = req.user_id or "usr_default"
 
-    # Get user profile context to guide the user towards their goal
     profile_context = _get_user_profile_context(user_id)
 
     context = "\n".join(
@@ -359,10 +482,9 @@ async def chat(req: ChatRequest):
     reply_text = _generate_gemini(prompt)
 
     if not reply_text:
-        reply_text = "Synapse AI is operating in offline mode. Please add your free GEMINI_API_KEY to backend/.env (GEMINI_API_KEY=AIzaSy...) or root .env to unlock live Gemini responses."
-        suggestions = ["Where do I get a free API key?", "How do I set backend/.env?", "What can Synapse AI do?"]
-    else:
-        suggestions = _build_suggestions(req.message)
+        reply_text = _generate_smart_fallback(req.message, user_id)
+
+    suggestions = _build_suggestions(req.message)
 
     _record_chat_message(user_id, "user", req.message)
     _record_chat_message(user_id, "assistant", reply_text, suggestions)
@@ -514,48 +636,6 @@ def _static_recommendations(goal: str, failed_concepts: List[str] = []) -> List[
         ContentItem(type="video",   title="The Complete Developer Roadmap 2024",           youtube_id="ysEN5RaKOlA", url="https://www.youtube.com/watch?v=ysEN5RaKOlA", duration="18 min",  reason="Why: Structured career path guide — understand what to learn and in which order.",   signal_score=97),
         ContentItem(type="video",   title="Build Projects to Get Hired as a Developer",    youtube_id="QkOCbt_o2HY", url="https://www.youtube.com/watch?v=QkOCbt_o2HY", duration="12 min",  reason="Why: Portfolio-building strategy to convert learning into career outcomes.",         signal_score=96),
         ContentItem(type="article", title="The Feynman Technique – Learn Anything",        youtube_id="",           url="https://fs.blog/feynman-technique/", duration="6 min read", reason="Why: The best learning strategy — explains through teaching to lock in understanding.", signal_score=94),
-=======
-        ContentItem(
-            type="video",
-            title=f"Deep Work – Achieve Peak Performance{concepts_str}",
-            youtube_id="gTaJhjQHcf8",
-            url="https://www.youtube.com/watch?v=gTaJhjQHcf8",
-            duration="14 min",
-            reason=f"Why: Cal Newport deep work framework targeted for your struggle with {', '.join(failed_concepts)}." if is_gap else "Why: Cal Newport deep work framework — directly boosts ability to reach your goal.",
-            signal_score=98,
-            is_gap_fix=is_gap
-        ),
-        ContentItem(
-            type="short",
-            title="The 5-Second Rule in 60 Seconds",
-            youtube_id="k2TaFVANNTg",
-            url="https://www.youtube.com/shorts/k2TaFVANNTg",
-            duration="60 sec",
-            reason="Why: Instant motivation trigger — activates momentum toward your goal.",
-            signal_score=96,
-            is_gap_fix=False
-        ),
-        ContentItem(
-            type="reel",
-            title="Flow State Activation – Get Deep Focus",
-            youtube_id="QkOCbt_o2HY",
-            url="https://www.youtube.com/watch?v=QkOCbt_o2HY",
-            duration="45 sec",
-            reason="Why: Primes your brain for high-yield learning sessions.",
-            signal_score=95,
-            is_gap_fix=False
-        ),
-        ContentItem(
-            type="article",
-            title="The Feynman Technique – Learn Anything",
-            youtube_id="",
-            url="https://fs.blog/feynman-technique/",
-            duration="6 min read",
-            reason=f"Why: Explains through teaching to lock in understanding, targeting your struggle with {', '.join(failed_concepts)}." if is_gap else "Why: The best learning strategy — explains through teaching to lock in understanding.",
-            signal_score=94,
-            is_gap_fix=is_gap
-        ),
->>>>>>> 309b4388fd54a2157a097f4e024d58ed85f73157
     ]
 
 
@@ -1368,8 +1448,6 @@ def _build_suggestions(prompt: str) -> List[str]:
     if any(k in p for k in ["tired", "sleep", "energy", "burnout"]):
         return ["View sleep protocol", "Log energy baseline", "Start recovery sprint"]
     return ["Analyse my aspiration gap", "Generate a focus sprint", "Curate 4 resources"]
-
->>>>>>> 654870efc3019879ce39ba7ea04242b2822dfc1f
 
 @app.get("/")
 async def root():
