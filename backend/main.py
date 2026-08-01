@@ -253,6 +253,15 @@ class DeepSkillQuizSubmitRequest(BaseModel):
     selected_option: int
     correct_option: int
 
+class OnboardingRequest(BaseModel):
+    user_id: Optional[str] = "usr_default"
+    name: Optional[str] = "User"
+    current_role: str
+    future_goal: str
+    timeline: Optional[str] = "6 Months"
+    skills: List[str] = []
+    condition: Optional[str] = "Deep Skill Focus"
+
 class RoadmapRequest(BaseModel):
     aspiration: str
     user_id: Optional[str] = "usr_default"
