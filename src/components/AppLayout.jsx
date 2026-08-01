@@ -313,7 +313,7 @@ export default function AppLayout({ currentUser, onLogout }) {
           </nav>
         </div>
 
-        {/* User Profile Pill at Bottom */}
+        {/* User Profile Capsule & Logout at Bottom */}
         <div className={`p-3 rounded-2xl border shadow-sm flex items-center justify-between transition-opacity duration-300 ${
           isDarkMode 
             ? 'bg-slate-900/90 border-slate-800 text-slate-100' 
@@ -330,18 +330,23 @@ export default function AppLayout({ currentUser, onLogout }) {
             {!sidebarCollapsed && (
               <div className="animate-fade-in overflow-hidden">
                 <h4 className={`text-xs font-bold truncate ${isDarkMode ? 'text-slate-100' : 'text-stone-900'}`}>{userName}</h4>
-                <p className={`text-[10px] font-medium truncate ${isDarkMode ? 'text-slate-400' : 'text-stone-400'}`}>Growth Catalyst</p>
+                <p className={`text-[10px] font-medium truncate ${isDarkMode ? 'text-slate-400' : 'text-stone-400'}`}>{currentUser?.email || 'Logged In'}</p>
               </div>
             )}
           </div>
 
-          {!sidebarCollapsed && onLogout && (
+          {onLogout && (
             <button
               onClick={onLogout}
-              className="p-1.5 rounded-lg hover:bg-rose-500/10 text-slate-400 hover:text-rose-500 transition cursor-pointer"
-              title="Log Out"
+              className={`p-2 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer ${
+                isDarkMode 
+                  ? 'bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20' 
+                  : 'bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-100'
+              }`}
+              title="Log Out of Session"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-4 h-4 shrink-0" />
+              {!sidebarCollapsed && <span className="hidden sm:inline">Log Out</span>}
             </button>
           )}
         </div>
@@ -377,9 +382,25 @@ export default function AppLayout({ currentUser, onLogout }) {
             </div>
           </div>
 
-          {/* Top Right Action Icons & Dark Mode Toggle Switch */}
+          {/* Top Right Action Icons, Dark Mode Toggle & Log Out Button */}
           <div className="flex items-center gap-3 relative">
             
+            {/* Top Right Log Out Button */}
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className={`px-3 py-2 rounded-full border shadow-sm flex items-center gap-1.5 text-xs font-extrabold transition-all duration-300 cursor-pointer ${
+                  isDarkMode 
+                    ? 'bg-slate-900 border-rose-500/40 text-rose-400 hover:bg-rose-500/10' 
+                    : 'bg-white border-stone-200/80 text-rose-600 hover:bg-rose-50'
+                }`}
+                title="Log Out of Session"
+              >
+                <LogOut className="w-4 h-4 text-rose-500 shrink-0" />
+                <span className="hidden md:inline">Log Out</span>
+              </button>
+            )}
+
             {/* Dark Mode Toggle Switch Button */}
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
@@ -713,7 +734,7 @@ export default function AppLayout({ currentUser, onLogout }) {
                         </span>
                       </div>
                       <p className={`text-xs ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
-                        Neural System Architect • Prefrontal Focus Specialist
+                        {currentUser?.email || 'Authenticated Growth Profile'}
                       </p>
                       <div className="flex items-center gap-4 mt-2 text-xs font-mono">
                         <span className="flex items-center gap-1.5 text-amber-500 font-bold">
@@ -728,19 +749,31 @@ export default function AppLayout({ currentUser, onLogout }) {
                     </div>
                   </div>
 
-                  {/* Level Progress */}
-                  <div className="w-full md:w-64 flex flex-col gap-2">
-                    <div className={`flex justify-between text-xs font-mono font-bold ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
-                      <span>Level Progression</span>
-                      <span>85.5%</span>
+                  {/* Level Progress & Logout */}
+                  <div className="w-full md:w-64 flex flex-col gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <div className={`flex justify-between text-xs font-mono font-bold ${isDarkMode ? 'text-slate-400' : 'text-stone-500'}`}>
+                        <span>Level Progression</span>
+                        <span>85.5%</span>
+                      </div>
+                      <div className={`w-full h-3 rounded-full overflow-hidden border ${
+                        isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-stone-100 border-stone-200/50'
+                      }`}>
+                        <div className={`h-full rounded-full ${
+                          isDarkMode ? 'bg-gradient-to-r from-indigo-500 to-teal-400' : 'bg-gradient-to-r from-teal-400 to-cyan-500'
+                        }`} style={{ width: '85.5%' }} />
+                      </div>
                     </div>
-                    <div className={`w-full h-3 rounded-full overflow-hidden border ${
-                      isDarkMode ? 'bg-slate-950 border-slate-800' : 'bg-stone-100 border-stone-200/50'
-                    }`}>
-                      <div className={`h-full rounded-full ${
-                        isDarkMode ? 'bg-gradient-to-r from-indigo-500 to-teal-400' : 'bg-gradient-to-r from-teal-400 to-cyan-500'
-                      }`} style={{ width: '85.5%' }} />
-                    </div>
+
+                    {onLogout && (
+                      <button
+                        onClick={onLogout}
+                        className="w-full py-2.5 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-500 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Sign Out of Session</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
