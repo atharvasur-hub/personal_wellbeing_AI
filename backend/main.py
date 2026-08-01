@@ -1615,6 +1615,25 @@ def _classify_community(aspiration: str) -> dict:
         }
 
 def _get_community_messages(community_id: str) -> List[Dict[str, Any]]:
+    # 1. Try Supabase first for global sync
+    if supabase_client:
+        try:
+            res = supabase_client.table("community_messages").select("*").eq("community_id", community_id).order("created_at").execute()
+            if res.data is not None:
+                return [{
+                    "id": str(r.get("id")),
+                    "community_id": r.get("community_id"),
+                    "sender_id": r.get("sender_id"),
+                    "sender_name": r.get("sender_name"),
+                    "role": r.get("role"),
+                    "text": r.get("text"),
+                    "is_announcement": bool(r.get("is_announcement")),
+                    "created_at": r.get("created_at")
+                } for r in res.data]
+        except Exception as e:
+            print(f"[FastAPI] Supabase community fetch error: {e}")
+
+    # 2. Fallback to local SQLite
     try:
         conn = sqlite3.connect("users.db")
         conn.row_factory = sqlite3.Row
@@ -1645,6 +1664,29 @@ def _get_community_messages(community_id: str) -> List[Dict[str, Any]]:
 
 def _record_community_message(community_id: str, sender_id: str, sender_name: str, role: str, text: str, is_announcement: bool = False):
     created_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    
+    msg_obj = {
+        "community_id": community_id,
+        "sender_id": sender_id,
+        "sender_name": sender_name,
+        "role": role,
+        "text": text,
+        "is_announcement": is_announcement,
+        "created_at": created_at
+    }
+    
+    # 1. Try Supabase first
+    if supabase_client:
+        try:
+            res = supabase_client.table("community_messages").insert(msg_obj).execute()
+            if res.data and len(res.data) > 0:
+                ret = msg_obj.copy()
+                ret["id"] = str(res.data[0].get("id"))
+                return ret
+        except Exception as e:
+            print(f"[FastAPI] Supabase community insert error: {e}")
+
+    # 2. Fallback to local SQLite
     try:
         conn = sqlite3.connect("users.db")
         cursor = conn.cursor()
@@ -1660,18 +1702,10 @@ def _record_community_message(community_id: str, sender_id: str, sender_name: st
     if "community_messages" not in in_memory_db:
         in_memory_db["community_messages"] = []
     
-    msg_obj = {
-        "id": int(time.time() * 1000),
-        "community_id": community_id,
-        "sender_id": sender_id,
-        "sender_name": sender_name,
-        "role": role,
-        "text": text,
-        "is_announcement": is_announcement,
-        "created_at": created_at
-    }
-    in_memory_db["community_messages"].append(msg_obj)
-    return msg_obj
+    ret_obj = msg_obj.copy()
+    ret_obj["id"] = int(time.time() * 1000)
+    in_memory_db["community_messages"].append(ret_obj)
+    return ret_obj
 
 def seed_community_messages(community_id: str):
     existing = _get_community_messages(community_id)
