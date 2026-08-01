@@ -31,7 +31,6 @@ import CuratedFeed from './CuratedFeed';
 import AgenticOnboardingFlow from './AgenticOnboardingFlow';
 import HabitSteeringModal from './HabitSteeringModal';
 import FocusRoom from './FocusRoom';
-import VerifiedSkillsActiveRecall from './VerifiedSkillsActiveRecall';
 import NewUserGoalAssessmentModal from './NewUserGoalAssessmentModal';
 import UserJourneyTimeline from './UserJourneyTimeline';
 import ProfileVpmDashboard from './ProfileVpmDashboard';
@@ -202,11 +201,6 @@ export default function AppLayout({ currentUser, onLogout }) {
   const [userName, setUserName] = useState(() => getStorageItem('name', '') || currentUser?.name || 'Atharva Sur');
   const [userRole, setUserRole] = useState(() => getStorageItem('role', '') || 'Growth Catalyst • Tier 3');
   const [userAspiration, setUserAspiration] = useState(() => getStorageItem('aspiration', '') || 'Senior AI Architect');
-  const [verifiedSkillsCount, setVerifiedSkillsCount] = useState(() => {
-    const displaySkillsCount = getStorageItem('skills_verified', '0 Concepts');
-    return parseInt(displaySkillsCount.split(' ')[0]) || 0;
-  });
-
   const userInitials = (userName || 'AS').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'AS';
 
   useEffect(() => {
@@ -214,9 +208,6 @@ export default function AppLayout({ currentUser, onLogout }) {
       setUserName(getStorageItem('name', '') || currentUser?.name || 'Atharva Sur');
       setUserRole(getStorageItem('role', '') || 'Growth Catalyst • Tier 3');
       setUserAspiration(getStorageItem('aspiration', '') || 'Senior AI Architect');
-      
-      const displaySkillsCount = getStorageItem('skills_verified', '0 Concepts');
-      setVerifiedSkillsCount(parseInt(displaySkillsCount.split(' ')[0]) || 0);
     };
     handleUpdate();
     window.addEventListener('aspirationUpdated', handleUpdate);
@@ -398,7 +389,6 @@ export default function AppLayout({ currentUser, onLogout }) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home },
     { id: 'focus', label: 'Focus Room', icon: Clock },
-    { id: 'skills', label: 'Verified Skills', icon: Brain },
     { id: 'community', label: 'Community Hub', icon: Users },
     { id: 'journey', label: 'Journey Map', icon: Compass },
     { id: 'leaderboard', label: 'Leaderboard', icon: Trophy },
@@ -463,15 +453,7 @@ export default function AppLayout({ currentUser, onLogout }) {
                     }`} />
                   {!sidebarCollapsed && <span className="animate-fade-in">{item.label}</span>}
 
-                  {item.id === 'skills' && verifiedSkillsCount > 0 && (
-                    <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] font-mono font-bold animate-pulse ${
-                      isActive 
-                        ? 'bg-indigo-600 text-white' 
-                        : isDarkMode ? 'bg-indigo-500/25 text-indigo-300 border border-indigo-500/30' : 'bg-indigo-50 text-indigo-700 border border-indigo-150'
-                    }`}>
-                      {verifiedSkillsCount}
-                    </span>
-                  )}
+
 
                   {sidebarCollapsed && (
                     <div className={`absolute left-16 px-3 py-1.5 rounded-xl text-xs font-medium opacity-0 group-hover:opacity-100 pointer-events-none transition duration-150 z-40 whitespace-nowrap shadow-xl ${isDarkMode ? 'bg-slate-800 text-white border border-slate-700' : 'bg-stone-900 text-white'
@@ -872,8 +854,7 @@ export default function AppLayout({ currentUser, onLogout }) {
               <FocusRoom isDarkMode={isDarkMode} currentUser={currentUser} />
             )}
 
-            {/* VERIFIED SKILLS & ACTIVE RECALL VIEW */}
-            {activeMenu === 'skills' && <VerifiedSkillsActiveRecall currentUser={currentUser} isDarkMode={isDarkMode} />}
+            {/* VERIFIED SKILLS & ACTIVE RECALL VIEW - Removed */}
             {activeMenu === 'journey' && <UserJourneyTimeline currentUser={currentUser} isDarkMode={isDarkMode} />}
             {activeMenu === 'leaderboard' && <Leaderboard isDarkMode={isDarkMode} />}
 

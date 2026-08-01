@@ -376,34 +376,45 @@ export default function AgenticOnboardingFlow({ isDarkMode = false }) {
     setStep('curating');
     setCuratingStep(0);
 
-    // Save to Backend API & Supabase with correct object format
-    const userId = currentUser?.id || 'usr_default';
-    saveAspirationToBackend({ aspiration: goalText, user_id: userId });
-    saveUserAspirationToSupabase({
-      primary_goal: goalText,
-      current_mood: 'focused',
-      fatigue_level: 'low',
-      intent_vector: { source: 'onboarding_chat' }
-    });
+    try {
+      // Save to Backend API & Supabase with correct object format
+      const userId = 'usr_default';
+      saveAspirationToBackend({ aspiration: goalText, user_id: userId });
+      saveUserAspirationToSupabase({
+        primary_goal: goalText,
+        current_mood: 'focused',
+        fatigue_level: 'low',
+        intent_vector: { source: 'onboarding_chat' }
+      });
 
-    // Fetch AI recommendations & AI roadmap (Gemini + fallback)
-    const [recs, roadmapData] = await Promise.all([
-      fetchAIRecommendations(goalText),
-      fetchAIRoadmap(goalText)
-    ]);
+      // Fetch AI recommendations & AI roadmap (Gemini + fallback)
+      const [recs, roadmapData] = await Promise.all([
+        fetchAIRecommendations(goalText),
+        fetchAIRoadmap(goalText)
+      ]);
 
-    if (roadmapData && roadmapData.nodes) {
-      localStorage.setItem('synapse_user_roadmap', JSON.stringify(roadmapData.nodes));
+      if (roadmapData && roadmapData.nodes) {
+        localStorage.setItem('synapse_user_roadmap', JSON.stringify(roadmapData.nodes));
+      }
+      window.dispatchEvent(new Event('synapse_roadmap_updated'));
+      window.dispatchEvent(new Event('aspirationUpdated'));
+
+      setRecommendations(recs);
+      // Cache media in localStorage for future loads
+      if (recs && recs.length > 0) {
+        localStorage.setItem('synapse_curated_media', JSON.stringify(recs));
+      }
+      setStep('feed');
+    } catch (error) {
+      console.error("Error during curation:", error);
+      // Revert step and inform user of error
+      setStep('chat');
+      setMessages(prev => [...prev, {
+        id: Date.now() + 2,
+        role: 'ai',
+        text: "I encountered an error while curating your feed. Please try again."
+      }]);
     }
-    window.dispatchEvent(new Event('synapse_roadmap_updated'));
-    window.dispatchEvent(new Event('aspirationUpdated'));
-
-    setRecommendations(recs);
-    // Cache media in localStorage for future loads
-    if (recs && recs.length > 0) {
-      localStorage.setItem('synapse_curated_media', JSON.stringify(recs));
-    }
-    setStep('feed');
   };
 
   const handleChipClick = (chip) => setInput(chip);
