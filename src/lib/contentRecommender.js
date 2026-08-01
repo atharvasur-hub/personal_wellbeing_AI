@@ -24,7 +24,10 @@ export async function fetchAIRecommendations(goalText, userId = null) {
       duration: item.duration,
       reason: item.reason,
       signalScore: item.signal_score || 95,
-      isGapFix: item.is_gap_fix || false
+      isGapFix: item.is_gap_fix || false,
+      contentType: item.content_type,
+      thumbnailUrl: item.thumbnail_url,
+      sourceUrl: item.source_url
     }));
   }
 

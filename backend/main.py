@@ -159,7 +159,7 @@ class GoalRequest(BaseModel):
     user_id: Optional[str] = "usr_default"
 
 class ContentItem(BaseModel):
-    type: str          # "video" | "short" | "reel" | "article"
+    type: str          # "video" | "short" | "reel" | "article" | "podcast" | "speech"
     title: str
     youtube_id: str    # empty string for articles
     url: str
@@ -167,6 +167,9 @@ class ContentItem(BaseModel):
     reason: str
     signal_score: int
     is_gap_fix: Optional[bool] = False
+    content_type: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    source_url: Optional[str] = None
 
 
 class RecommendationResponse(BaseModel):
@@ -449,19 +452,22 @@ You are an expert learning curator AI. A user has stated this goal: "{goal}"
 {gap_instruction}
 
 Return ONLY a valid JSON array with exactly 4 objects. No markdown, no extra text. Each object:
-- "type": one of "video", "short", "reel", "article"
-- "title": descriptive title (max 10 words)
-- "youtube_id": REAL 11-char YouTube video ID (empty string "" for articles)
+- "type": one of "video", "podcast", "speech", "article"
+- "content_type": same as type ("video", "podcast", "speech", "article")
+- "title": descriptive title (for speech, make this an inspiring quote)
+- "youtube_id": REAL 11-char YouTube video ID (empty string "" for non-videos)
 - "url": full URL to the resource
+- "source_url": direct URL to media (for podcast, use "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3")
+- "thumbnail_url": URL to cover image (optional)
 - "duration": e.g. "12 min" or "60 sec" or "8 min read"
 - "reason": one sentence starting with "Why: " explaining relevance to the goal
 - "signal_score": integer 90-99
 - "is_gap_fix": boolean (true if this card specifically targets the failed concepts/blind spots, false otherwise)
 
 Rules:
-1. Item 1 = type "video" (5-20 min full YouTube tutorial)
-2. Item 2 = type "short" (YouTube Short, under 60 sec)
-3. Item 3 = type "reel" (short-form video reel, under 60 sec)
+1. Item 1 = type "podcast" (30-60 min deep dive discussion)
+2. Item 2 = type "speech" (motivational or educational keynote)
+3. Item 3 = type "video" (5-20 min full YouTube tutorial)
 4. Item 4 = type "article" (high-quality article, youtube_id must be "")
 Return ONLY the JSON array.
 """.strip()
@@ -496,22 +502,26 @@ def _static_recommendations(goal: str, failed_concepts: List[str] = []) -> List[
     if any(k in g for k in ["react", "hooks", "frontend", "javascript"]):
         return [
             ContentItem(
-                type="video",
-                title=f"React useEffect Deep Dive{concepts_str}",
-                youtube_id="SqcY0GlETPk",
-                url="https://www.youtube.com/watch?v=SqcY0GlETPk",
-                duration="14 min",
-                reason=f"Why: Targeted review for your struggle with {', '.join(failed_concepts)}." if is_gap else "Why: Covers every edge-case of useEffect memory leaks directly aligned with your goal.",
+                type="podcast",
+                content_type="podcast",
+                title=f"React Architecture Podcast{concepts_str}",
+                youtube_id="",
+                url="https://react.dev",
+                source_url="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+                thumbnail_url="https://images.unsplash.com/photo-1590602847861-f357a9332bbc?auto=format&fit=crop&q=80&w=200",
+                duration="45 min",
+                reason=f"Why: Targeted review for your struggle with {', '.join(failed_concepts)}." if is_gap else "Why: Deep dive discussion on complex state management in React apps.",
                 signal_score=98,
                 is_gap_fix=is_gap
             ),
             ContentItem(
-                type="short",
-                title="useState vs useReducer in 60 Seconds",
-                youtube_id="bFRDIBR9zM8",
-                url="https://www.youtube.com/shorts/bFRDIBR9zM8",
-                duration="60 sec",
-                reason="Why: 60-second micro-refresher on the most commonly confused React hooks.",
+                type="speech",
+                content_type="speech",
+                title="The future belongs to those who learn more skills and combine them in creative ways.",
+                youtube_id="",
+                url="#",
+                duration="5 min read",
+                reason="Why: A motivational reminder to push through the frustration of learning complex state paradigms.",
                 signal_score=96,
                 is_gap_fix=False
             ),
