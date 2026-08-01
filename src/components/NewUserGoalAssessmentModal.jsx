@@ -114,14 +114,28 @@ export default function NewUserGoalAssessmentModal({
     await new Promise(r => setTimeout(r, 800));
     setAiStatusMessage('Model Fine-Tuned Successfully!');
 
-    // Persist onboarding and user assessment data
+    // Persist onboarding and user assessment data with user scoping
+    const setKey = (key, val) => {
+      if (currentUser?.id) {
+        localStorage.setItem(`synapse_user_${currentUser.id}_${key}`, val);
+      }
+      localStorage.setItem(`synapse_profile_${key}`, val);
+    };
+
     localStorage.setItem('synapse_onboarding_completed', 'true');
-    localStorage.setItem('synapse_profile_name', name);
-    localStorage.setItem('synapse_profile_role', role);
-    localStorage.setItem('synapse_profile_aspiration', finalGoal);
+    setKey('name', name);
+    setKey('role', role);
+    setKey('aspiration', finalGoal);
+    setKey('streak', '0-Day Focus Streak');
+    setKey('level', '1');
+    setKey('xp', '0');
+    setKey('focus_time', '0h 0m');
+    setKey('skills_verified', '0 Concepts');
+    setKey('goal_velocity', '0%');
+    setKey('vpm_index', '$0.00/min');
     localStorage.setItem('synapse_user_condition', condition);
     localStorage.setItem('synapse_user_timeline', timeline);
-    localStorage.setItem('synapse_profile_skills', JSON.stringify(selectedSkills));
+    setKey('skills', JSON.stringify(selectedSkills));
 
     setLoading(false);
 

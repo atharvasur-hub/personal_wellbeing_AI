@@ -13,13 +13,13 @@ import {
 } from 'recharts';
 import { Sparkles, Cpu } from 'lucide-react';
 
-const initialData = [
-  { subject: 'Systems Architecture', Current: 85, Target: 98, fullMark: 100 },
-  { subject: 'Deep Work Endurance', Current: 70, Target: 95, fullMark: 100 },
-  { subject: 'Public Speaking', Current: 55, Target: 85, fullMark: 100 },
-  { subject: 'Rust Concurrency', Current: 60, Target: 90, fullMark: 100 },
-  { subject: 'Product Management', Current: 82, Target: 92, fullMark: 100 },
-  { subject: 'AI Alignment & Safety', Current: 78, Target: 96, fullMark: 100 },
+const defaultSkillNodes = [
+  { subject: 'Systems Architecture', Target: 98 },
+  { subject: 'Deep Work Endurance', Target: 95 },
+  { subject: 'Public Speaking', Target: 85 },
+  { subject: 'Rust Concurrency', Target: 90 },
+  { subject: 'Product Management', Target: 92 },
+  { subject: 'AI Alignment & Safety', Target: 96 },
 ];
 
 interface IdentityAspirationsGraphProps {
@@ -27,8 +27,24 @@ interface IdentityAspirationsGraphProps {
 }
 
 export default function IdentityAspirationsGraph({ isDarkMode = false }: IdentityAspirationsGraphProps) {
-  const [data, setData] = useState(initialData);
+  const [data, setData] = useState(() => {
+    // Check if user has initialized / completed sprints
+    const levelStr = localStorage.getItem('synapse_profile_level') || '1';
+    const xpStr = localStorage.getItem('synapse_profile_xp') || '0';
+    const xpVal = parseInt(xpStr.replace(/,/g, '')) || 0;
+    const isNewUser = parseInt(levelStr) <= 1 && xpVal === 0;
+
+    return defaultSkillNodes.map(node => ({
+      ...node,
+      Current: isNewUser ? 0 : Math.round(node.Target * 0.7),
+      fullMark: 100
+    }));
+  });
+
   const [activeSeries, setActiveSeries] = useState<'both' | 'current' | 'target'>('both');
+
+  const currentAvg = Math.round(data.reduce((acc, curr) => acc + curr.Current, 0) / data.length);
+  const targetAvg = Math.round(data.reduce((acc, curr) => acc + curr.Target, 0) / data.length);
 
   return (
     <div className={`relative overflow-hidden rounded-3xl border p-6 shadow-sm flex flex-col justify-between gap-6 transition-all ${
@@ -100,10 +116,10 @@ export default function IdentityAspirationsGraph({ isDarkMode = false }: Identit
         <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 text-xs">
           <span className={`font-bold flex items-center gap-1 ${isDarkMode ? 'text-indigo-300' : 'text-indigo-900'}`}>
             <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
-            Implicit Profiling Active:
+            Goal Progress Tracking Active:
           </span>
           <span className={`font-mono text-[11px] ${isDarkMode ? 'text-slate-300' : 'text-stone-700'}`}>
-            Node weights adjusted based on <strong className="text-amber-600 font-bold">14 recent skips</strong> and <strong className="text-emerald-600 font-bold">42 clicks</strong>.
+            Tracking user progression from initial baseline ({currentAvg}%) to target horizon ({targetAvg}%).
           </span>
         </div>
       </div>
@@ -167,11 +183,11 @@ export default function IdentityAspirationsGraph({ isDarkMode = false }: Identit
       }`}>
         <div className="flex items-center gap-2 text-teal-600 font-semibold">
           <div className="w-2.5 h-2.5 rounded-full bg-teal-600" />
-          <span>Current State Avg: 71.6% Mastery</span>
+          <span>Current State Avg: {currentAvg}% Mastery</span>
         </div>
         <div className="flex items-center gap-2 text-violet-600 font-semibold justify-end">
           <div className="w-2.5 h-2.5 rounded-full bg-violet-600" />
-          <span>Target Horizon Avg: 93.2% Mastery</span>
+          <span>Target Horizon Avg: {targetAvg}% Mastery</span>
         </div>
       </div>
     </div>

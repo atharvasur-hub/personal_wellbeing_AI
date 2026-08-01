@@ -4,6 +4,11 @@ import { Flame, Compass, Brain, Trophy, History, Rocket, ArrowRight, CheckCircle
 const UserJourneyTimeline = ({ isDarkMode }) => {
   const [viewMode, setViewMode] = useState('timeline'); // 'timeline' or 'grid'
 
+  const levelStr = typeof window !== 'undefined' ? (localStorage.getItem('synapse_profile_level') || '1') : '1';
+  const xpStr = typeof window !== 'undefined' ? (localStorage.getItem('synapse_profile_xp') || '0') : '0';
+  const xpVal = parseInt(xpStr.replace(/,/g, '')) || 0;
+  const currentProgress = xpVal > 0 ? Math.min(100, Math.round((xpVal / 4000) * 100)) : 0;
+
   const milestones = [
     {
       id: 'past',
@@ -26,13 +31,15 @@ const UserJourneyTimeline = ({ isDarkMode }) => {
       subtitle: 'Real-time',
       icon: Flame,
       color: 'teal',
-      description: 'Actively shifting from consumption to creation. Gaining momentum.',
+      description: currentProgress === 0 
+        ? 'Initial account state. Complete your first focus sprint to begin your growth trajectory.'
+        : 'Actively shifting from consumption to creation. Gaining momentum.',
       metrics: [
-        { label: 'Doomscroll Time', value: '< 45 mins/day' },
-        { label: 'Focus Duration', value: '3.0 hrs blocks' },
-        { label: 'Identity Mastery', value: '6/10 Avg' },
+        { label: 'Doomscroll Time', value: currentProgress === 0 ? 'Baseline' : '< 45 mins/day' },
+        { label: 'Focus Duration', value: localStorage.getItem('synapse_profile_focus_time') || '0h 0m' },
+        { label: 'Identity Mastery', value: `${currentProgress === 0 ? 0 : Math.round(currentProgress / 10)}/10 Avg` },
       ],
-      progress: 65,
+      progress: currentProgress,
     },
     {
       id: 'future',

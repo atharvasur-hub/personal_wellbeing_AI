@@ -15,12 +15,12 @@ import {
 import { Sparkles, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 const projectionData = [
-  { month: 'Month 1', PassiveTrend: 68, AspirationTrend: 72, DoomscrollHours: 3.2, FlowHours: 8.5 },
-  { month: 'Month 2', PassiveTrend: 62, AspirationTrend: 78, DoomscrollHours: 3.8, FlowHours: 11.0 },
-  { month: 'Month 3', PassiveTrend: 55, AspirationTrend: 85, DoomscrollHours: 4.1, FlowHours: 14.5 },
-  { month: 'Month 4', PassiveTrend: 48, AspirationTrend: 90, DoomscrollHours: 4.5, FlowHours: 17.0 },
-  { month: 'Month 5', PassiveTrend: 42, AspirationTrend: 94, DoomscrollHours: 4.9, FlowHours: 19.5 },
-  { month: 'Month 6', PassiveTrend: 35, AspirationTrend: 98, DoomscrollHours: 5.2, FlowHours: 22.0 },
+  { month: 'Month 1 (Start)', PassiveTrend: 20, AspirationTrend: 0, DoomscrollHours: 3.5, FlowHours: 0.0 },
+  { month: 'Month 2', PassiveTrend: 25, AspirationTrend: 35, DoomscrollHours: 3.0, FlowHours: 6.0 },
+  { month: 'Month 3', PassiveTrend: 30, AspirationTrend: 60, DoomscrollHours: 2.2, FlowHours: 12.0 },
+  { month: 'Month 4', PassiveTrend: 35, AspirationTrend: 78, DoomscrollHours: 1.5, FlowHours: 16.5 },
+  { month: 'Month 5', PassiveTrend: 40, AspirationTrend: 90, DoomscrollHours: 0.8, FlowHours: 20.0 },
+  { month: 'Month 6 (Target)', PassiveTrend: 45, AspirationTrend: 98, DoomscrollHours: 0.2, FlowHours: 24.0 },
 ];
 
 interface FutureSelfSimulatorProps {

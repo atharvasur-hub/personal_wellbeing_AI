@@ -29,41 +29,64 @@ interface ProfileVpmDashboardProps {
 }
 
 export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }: ProfileVpmDashboardProps) {
+  // Helper to retrieve user-scoped localStorage items with clean initial defaults for new accounts
+  const getStorageItem = (key: string, fallback: string): string => {
+    if (currentUser?.id) {
+      return localStorage.getItem(`synapse_user_${currentUser.id}_${key}`) || fallback;
+    }
+    return localStorage.getItem(`synapse_profile_${key}`) || fallback;
+  };
+
+  const setStorageItem = (key: string, val: string) => {
+    if (currentUser?.id) {
+      localStorage.setItem(`synapse_user_${currentUser.id}_${key}`, val);
+    } else {
+      localStorage.setItem(`synapse_profile_${key}`, val);
+    }
+  };
+
+  const removeStorageItem = (key: string) => {
+    if (currentUser?.id) {
+      localStorage.removeItem(`synapse_user_${currentUser.id}_${key}`);
+    }
+    localStorage.removeItem(`synapse_profile_${key}`);
+  };
+
   // Sync state with local storage or currentUser props
   const [userName, setUserName] = useState<string>(() => {
-    return localStorage.getItem('synapse_profile_name') || currentUser?.name || 'Atharva Sur';
+    return getStorageItem('name', currentUser?.name || 'New User');
   });
   const [userRole, setUserRole] = useState<string>(() => {
-    return localStorage.getItem('synapse_profile_role') || currentUser?.role || 'Growth Catalyst • Tier 3';
+    return getStorageItem('role', currentUser?.role || 'Growth Aspirant (Initial State)');
   });
   const [userAspiration, setUserAspiration] = useState<string>(() => {
-    return localStorage.getItem('synapse_profile_aspiration') || currentUser?.aspiration || 'Senior AI Architect';
+    return getStorageItem('aspiration', currentUser?.aspiration || 'Goal Not Set (Set Goal in Assessment)');
   });
   const [userEmail, setUserEmail] = useState<string>(() => {
-    return localStorage.getItem('synapse_profile_email') || currentUser?.email || 'usr_wellbeing_2026';
+    return getStorageItem('email', currentUser?.email || 'new_user_session');
   });
   const [focusStreak, setFocusStreak] = useState<string>(() => {
-    return localStorage.getItem('synapse_profile_streak') || '4-Day Focus Streak';
+    return getStorageItem('streak', '0-Day Focus Streak');
   });
   const [userLevel, setUserLevel] = useState<string>(() => {
-    return localStorage.getItem('synapse_profile_level') || '14';
+    return getStorageItem('level', '1');
   });
   const [userXP, setUserXP] = useState<string>(() => {
-    return localStorage.getItem('synapse_profile_xp') || '3,420';
+    return getStorageItem('xp', '0');
   });
 
   // Dynamic VPM performance metrics
   const [focusTime, setFocusTime] = useState<string>(() => {
-    return localStorage.getItem('synapse_profile_focus_time') || '0h 0m';
+    return getStorageItem('focus_time', '0h 0m');
   });
   const [skillsVerified, setSkillsVerified] = useState<string>(() => {
-    return localStorage.getItem('synapse_profile_skills_verified') || '12 Concepts';
+    return getStorageItem('skills_verified', '0 Concepts');
   });
   const [goalVelocity, setGoalVelocity] = useState<string>(() => {
-    return localStorage.getItem('synapse_profile_goal_velocity') || '84%';
+    return getStorageItem('goal_velocity', '0%');
   });
   const [vpmIndex, setVpmIndex] = useState<string>(() => {
-    return localStorage.getItem('synapse_profile_vpm_index') || '$4.82/min';
+    return getStorageItem('vpm_index', '$0.00/min');
   });
 
   const [pivotNotice, setPivotNotice] = useState<string | null>(null);
@@ -87,20 +110,22 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
   // Sync focus time live from localStorage
   useEffect(() => {
     const syncFocusTime = () => {
-      const savedTime = localStorage.getItem('synapse_profile_focus_time');
-      if (savedTime) {
-        setFocusTime(savedTime);
-      }
+      const savedTime = getStorageItem('focus_time', '0h 0m');
+      setFocusTime(savedTime);
     };
     syncFocusTime();
     const interval = setInterval(syncFocusTime, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [currentUser]);
 
-  // Keep form updated when opening edit mode
+  // Keep state updated when currentUser prop changes
   useEffect(() => {
-    if (currentUser?.name && !localStorage.getItem('synapse_profile_name')) {
-      setUserName(currentUser.name);
+    if (currentUser) {
+      setUserName(getStorageItem('name', currentUser.name || 'New User'));
+      setUserEmail(getStorageItem('email', currentUser.email || 'new_user_session'));
+      if (currentUser.aspiration && !getStorageItem('aspiration', '')) {
+        setUserAspiration(currentUser.aspiration);
+      }
     }
   }, [currentUser]);
 
@@ -135,34 +160,34 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
     setGoalVelocity(editForm.goalVelocity);
     setVpmIndex(editForm.vpmIndex);
 
-    // Save to LocalStorage
-    localStorage.setItem('synapse_profile_name', editForm.name);
-    localStorage.setItem('synapse_profile_role', editForm.role);
-    localStorage.setItem('synapse_profile_aspiration', editForm.aspiration);
-    localStorage.setItem('synapse_profile_email', editForm.email);
-    localStorage.setItem('synapse_profile_streak', editForm.streak);
-    localStorage.setItem('synapse_profile_level', editForm.level);
-    localStorage.setItem('synapse_profile_xp', editForm.xp);
-    localStorage.setItem('synapse_profile_focus_time', editForm.focusTime);
-    localStorage.setItem('synapse_profile_skills_verified', editForm.skillsVerified);
-    localStorage.setItem('synapse_profile_goal_velocity', editForm.goalVelocity);
-    localStorage.setItem('synapse_profile_vpm_index', editForm.vpmIndex);
+    // Save to LocalStorage (User-scoped)
+    setStorageItem('name', editForm.name);
+    setStorageItem('role', editForm.role);
+    setStorageItem('aspiration', editForm.aspiration);
+    setStorageItem('email', editForm.email);
+    setStorageItem('streak', editForm.streak);
+    setStorageItem('level', editForm.level);
+    setStorageItem('xp', editForm.xp);
+    setStorageItem('focus_time', editForm.focusTime);
+    setStorageItem('skills_verified', editForm.skillsVerified);
+    setStorageItem('goal_velocity', editForm.goalVelocity);
+    setStorageItem('vpm_index', editForm.vpmIndex);
 
     setIsEditing(false);
   };
 
   const handleResetDefaults = () => {
-    const defaultName = currentUser?.name || 'Atharva Sur';
-    const defaultRole = 'Growth Catalyst • Tier 3';
-    const defaultAspiration = 'Senior AI Architect';
-    const defaultEmail = currentUser?.email || 'usr_wellbeing_2026';
-    const defaultStreak = '4-Day Focus Streak';
-    const defaultLevel = '14';
-    const defaultXP = '3,420';
+    const defaultName = currentUser?.name || 'New User';
+    const defaultRole = 'Growth Aspirant (Initial State)';
+    const defaultAspiration = currentUser?.aspiration || 'Goal Not Set (Set Goal in Assessment)';
+    const defaultEmail = currentUser?.email || 'new_user_session';
+    const defaultStreak = '0-Day Focus Streak';
+    const defaultLevel = '1';
+    const defaultXP = '0';
     const defaultFocusTime = '0h 0m';
-    const defaultSkills = '12 Concepts';
-    const defaultVelocity = '84%';
-    const defaultVpm = '$4.82/min';
+    const defaultSkills = '0 Concepts';
+    const defaultVelocity = '0%';
+    const defaultVpm = '$0.00/min';
 
     setUserName(defaultName);
     setUserRole(defaultRole);
@@ -176,17 +201,17 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
     setGoalVelocity(defaultVelocity);
     setVpmIndex(defaultVpm);
 
-    localStorage.removeItem('synapse_profile_name');
-    localStorage.removeItem('synapse_profile_role');
-    localStorage.removeItem('synapse_profile_aspiration');
-    localStorage.removeItem('synapse_profile_email');
-    localStorage.removeItem('synapse_profile_streak');
-    localStorage.removeItem('synapse_profile_level');
-    localStorage.removeItem('synapse_profile_xp');
-    localStorage.removeItem('synapse_profile_focus_time');
-    localStorage.removeItem('synapse_profile_skills_verified');
-    localStorage.removeItem('synapse_profile_goal_velocity');
-    localStorage.removeItem('synapse_profile_vpm_index');
+    removeStorageItem('name');
+    removeStorageItem('role');
+    removeStorageItem('aspiration');
+    removeStorageItem('email');
+    removeStorageItem('streak');
+    removeStorageItem('level');
+    removeStorageItem('xp');
+    removeStorageItem('focus_time');
+    removeStorageItem('skills_verified');
+    removeStorageItem('goal_velocity');
+    removeStorageItem('vpm_index');
 
     setIsEditing(false);
   };
@@ -202,7 +227,7 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
     .map(part => part[0])
     .join('')
     .toUpperCase()
-    .slice(0, 2) || 'AS';
+    .slice(0, 2) || 'NU';
 
   return (
     <div className={`min-h-screen transition-colors duration-300 font-sans selection:bg-indigo-500 selection:text-white ${
@@ -285,34 +310,43 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
                       : 'bg-indigo-50 text-indigo-700 border-indigo-200'
                   }`}>
                     <Star className="h-4 w-4 fill-indigo-500 text-indigo-500" />
-                    <span>Level {userLevel} • {userXP} / 4,000 XP</span>
+                    <span>Level {userLevel} • {userXP} / {(parseInt(userLevel) || 1) * 1000} XP</span>
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Level Progress Bar */}
-            <div className={`w-full md:w-72 flex flex-col gap-3 rounded-2xl p-4 border ${
-              isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-stone-50 border-stone-200'
-            }`}>
-              <div className={`flex items-center justify-between text-xs font-mono font-bold ${
-                isDarkMode ? 'text-slate-300' : 'text-stone-700'
-              }`}>
-                <span>Level Progression</span>
-                <span className="text-teal-600 font-bold">85.5%</span>
-              </div>
-              <div className={`w-full h-3 rounded-full overflow-hidden border ${
-                isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-stone-200 border-stone-300/50'
-              }`}>
-                <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-teal-400 to-emerald-400" style={{ width: '85.5%' }} />
-              </div>
-              <div className={`flex items-center justify-between text-[11px] font-mono ${
-                isDarkMode ? 'text-slate-400' : 'text-stone-500'
-              }`}>
-                <span>Next Rank: Master Catalyst</span>
-                <span className="font-bold">+580 XP needed</span>
-              </div>
-            </div>
+            {/* Dynamic Level Progress Bar */}
+            {(() => {
+              const lvl = parseInt(userLevel) || 1;
+              const xpVal = parseInt((userXP || '0').toString().replace(/,/g, '')) || 0;
+              const maxXP = lvl * 1000;
+              const pct = Math.min(100, Math.round((xpVal / maxXP) * 100));
+              const needed = Math.max(0, maxXP - xpVal);
+              return (
+                <div className={`w-full md:w-72 flex flex-col gap-3 rounded-2xl p-4 border ${
+                  isDarkMode ? 'bg-slate-950/80 border-slate-800' : 'bg-stone-50 border-stone-200'
+                }`}>
+                  <div className={`flex items-center justify-between text-xs font-mono font-bold ${
+                    isDarkMode ? 'text-slate-300' : 'text-stone-700'
+                  }`}>
+                    <span>Level Progression</span>
+                    <span className="text-teal-600 font-bold">{pct}%</span>
+                  </div>
+                  <div className={`w-full h-3 rounded-full overflow-hidden border ${
+                    isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-stone-200 border-stone-300/50'
+                  }`}>
+                    <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 via-teal-400 to-emerald-400" style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className={`flex items-center justify-between text-[11px] font-mono ${
+                    isDarkMode ? 'text-slate-400' : 'text-stone-500'
+                  }`}>
+                    <span>Next Rank: Level {lvl + 1}</span>
+                    <span className="font-bold">+{needed.toLocaleString()} XP needed</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
