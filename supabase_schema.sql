@@ -12,13 +12,25 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 2. Create Chat Messages Table for AI Assistant Thread Persistence
+-- 2. Create Chat Messages Table (Personal Assistant)
 CREATE TABLE IF NOT EXISTS public.chat_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id TEXT DEFAULT 'default_session',
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
   text TEXT NOT NULL,
   suggestions JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 2.1 Create Community Messages Table (Cohorts)
+CREATE TABLE IF NOT EXISTS public.community_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  community_id TEXT NOT NULL,
+  sender_id TEXT NOT NULL,
+  sender_name TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  text TEXT NOT NULL,
+  is_announcement BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

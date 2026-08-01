@@ -57,7 +57,7 @@ def _generate_gemini(prompt: str) -> str:
     if gemini_client:
         try:
             response = gemini_client.models.generate_content(
-                model='gemini-2.5-flash',
+                model='gemini-2.0-flash',
                 contents=prompt,
             )
             if response.text:
@@ -1627,6 +1627,25 @@ def _classify_community(aspiration: str) -> dict:
         }
 
 def _get_community_messages(community_id: str) -> List[Dict[str, Any]]:
+    # 1. Try Supabase first for global sync
+    if supabase_client:
+        try:
+            res = supabase_client.table("community_messages").select("*").eq("community_id", community_id).order("created_at").execute()
+            if res.data is not None:
+                return [{
+                    "id": str(r.get("id")),
+                    "community_id": r.get("community_id"),
+                    "sender_id": r.get("sender_id"),
+                    "sender_name": r.get("sender_name"),
+                    "role": r.get("role"),
+                    "text": r.get("text"),
+                    "is_announcement": bool(r.get("is_announcement")),
+                    "created_at": r.get("created_at")
+                } for r in res.data]
+        except Exception as e:
+            print(f"[FastAPI] Supabase community fetch error: {e}")
+
+    # 2. Fallback to local SQLite
     try:
         conn = sqlite3.connect("users.db")
         conn.row_factory = sqlite3.Row
@@ -1657,6 +1676,29 @@ def _get_community_messages(community_id: str) -> List[Dict[str, Any]]:
 
 def _record_community_message(community_id: str, sender_id: str, sender_name: str, role: str, text: str, is_announcement: bool = False):
     created_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    
+    msg_obj = {
+        "community_id": community_id,
+        "sender_id": sender_id,
+        "sender_name": sender_name,
+        "role": role,
+        "text": text,
+        "is_announcement": is_announcement,
+        "created_at": created_at
+    }
+    
+    # 1. Try Supabase first
+    if supabase_client:
+        try:
+            res = supabase_client.table("community_messages").insert(msg_obj).execute()
+            if res.data and len(res.data) > 0:
+                ret = msg_obj.copy()
+                ret["id"] = str(res.data[0].get("id"))
+                return ret
+        except Exception as e:
+            print(f"[FastAPI] Supabase community insert error: {e}")
+
+    # 2. Fallback to local SQLite
     try:
         conn = sqlite3.connect("users.db")
         cursor = conn.cursor()
@@ -1672,18 +1714,10 @@ def _record_community_message(community_id: str, sender_id: str, sender_name: st
     if "community_messages" not in in_memory_db:
         in_memory_db["community_messages"] = []
     
-    msg_obj = {
-        "id": int(time.time() * 1000),
-        "community_id": community_id,
-        "sender_id": sender_id,
-        "sender_name": sender_name,
-        "role": role,
-        "text": text,
-        "is_announcement": is_announcement,
-        "created_at": created_at
-    }
-    in_memory_db["community_messages"].append(msg_obj)
-    return msg_obj
+    ret_obj = msg_obj.copy()
+    ret_obj["id"] = int(time.time() * 1000)
+    in_memory_db["community_messages"].append(ret_obj)
+    return ret_obj
 
 def seed_community_messages(community_id: str):
     existing = _get_community_messages(community_id)
@@ -1732,27 +1766,58 @@ def seed_community_messages(community_id: str):
 
 @app.get("/api/community/group")
 async def get_community_group(user_id: str = "usr_default"):
-    profile = in_memory_db["user_profiles"].get(user_id)
-    aspiration = ""
-    if profile:
-        aspiration = profile.get("aspiration") or ""
-    else:
-        if user_id == "usr_default":
-            aspiration = "Senior AI Architect"
-    
-    cdata = _classify_community(aspiration)
-    
-    # Dynamically find real users in the same cohort
-    real_members = []
+    # 1. Gather all user names
     user_names = {u["id"]: u.get("name", "User") for u in in_memory_db.get("users", [])}
     
+    # 2. Gather all aspirations
+    all_user_asps = {}
     for uid, prof in in_memory_db.get("user_profiles", {}).items():
+        if prof.get("aspiration"):
+            all_user_asps[uid] = prof.get("aspiration")
+            if prof.get("name"):
+                user_names[uid] = prof.get("name")
+                
+    for asp_obj in in_memory_db.get("user_aspirations", []):
+        uid = asp_obj.get("user_id")
+        if uid and asp_obj.get("aspiration"):
+            all_user_asps[uid] = asp_obj.get("aspiration")
+            
+    # Include all users even with no aspiration
+    for uid in user_names:
+        if uid not in all_user_asps:
+            all_user_asps[uid] = ""
+
+    # Fetch from Supabase if available
+    if supabase_client:
+        try:
+            res_asp = supabase_client.table("user_aspirations").select("user_id, aspiration").execute()
+            if res_asp.data:
+                for row in res_asp.data:
+                    if row.get("aspiration"):
+                        all_user_asps[row["user_id"]] = row["aspiration"]
+                        
+            res_prof = supabase_client.table("profiles").select("user_id, display_name").execute()
+            if res_prof.data:
+                for row in res_prof.data:
+                    user_names[row["user_id"]] = row.get("display_name") or "User"
+        except Exception:
+            pass
+
+    # 3. Determine current user's aspiration
+    aspiration = all_user_asps.get(user_id, "")
+    if not aspiration and user_id == "usr_default":
+        aspiration = "Senior AI Architect"
+        
+    cdata = _classify_community(aspiration)
+    
+    # 4. Find all matching members
+    real_members = []
+    for uid, u_asp in all_user_asps.items():
         if uid == user_id:
             continue
-        u_asp = prof.get("aspiration") or ""
         u_cdata = _classify_community(u_asp)
         if u_cdata["id"] == cdata["id"]:
-            name = prof.get("name") or user_names.get(uid) or f"User {uid[-4:]}"
+            name = user_names.get(uid) or f"User {uid[-4:]}" if uid else "Unknown"
             real_members.append({
                 "name": name,
                 "title": u_asp if u_asp else "Member",
@@ -1773,21 +1838,25 @@ async def post_community_message(req: CommunityMessageRequest):
     msg = _record_community_message(
         req.community_id, req.sender_id, req.sender_name, req.role or "user", req.text, is_announcement=False
     )
+    ai_reply_msg = None
     if req.role == "user":
-        agent_info = None
-        for cid in ["ai-ml", "full-stack", "growth"]:
-            cdata = _classify_community(cid if cid == req.community_id else "other")
-            if cdata["id"] == req.community_id:
-                agent_info = cdata
-                break
+        agent_name = "AI Facilitator"
+        agent_prompt = "You are an expert AI Facilitator."
         
-        if agent_info:
-            agent_name = agent_info["agent_name"]
-            agent_prompt = agent_info["agent_prompt"]
-            recent_msgs = _get_community_messages(req.community_id)[-8:]
-            thread_context = "\n".join([f"{m['sender_name']}: {m['text']}" for m in recent_msgs])
-            
-            prompt = f"""
+        if req.community_id == "ai-ml":
+            agent_name = "Aether-AI Facilitator"
+            agent_prompt = "You are Aether-AI for AI/ML."
+        elif req.community_id == "full-stack":
+            agent_name = "Nexus-Dev Facilitator"
+            agent_prompt = "You are Nexus-Dev for Full Stack."
+        else:
+            agent_name = "Soma-Growth Facilitator"
+            agent_prompt = "You are Soma-Growth for Wellbeing."
+
+        recent_msgs = _get_community_messages(req.community_id)[-8:]
+        thread_context = "\n".join([f"{m['sender_name']}: {m['text']}" for m in recent_msgs])
+        
+        prompt = f"""
 {agent_prompt}
 
 You are in a community group chat. Here is the recent chat history:
@@ -1795,20 +1864,21 @@ You are in a community group chat. Here is the recent chat history:
 
 Provide a short, 1-2 sentence response addressed to the community or the last sender, offering technical insight, productivity feedback, or encouragement related to their discussion. Keep it concise, high-tech, and supportive. Do not use prefixes like "{agent_name}:". Just write the text.
 """
-            ai_reply = _generate_gemini(prompt)
-            if not ai_reply:
-                if req.community_id == "ai-ml":
-                    ai_reply = f"Acknowledged. We should keep an eye on model overfitting when adjusting weights. Have you validated your training data profile?"
-                elif req.community_id == "full-stack":
-                    ai_reply = f"Excellent point. Always remember to decouple database calls from UI paint lifecycles to avoid bottlenecking."
-                else:
-                    ai_reply = f"Well observed. Regular energy logging is critical to maintaining a high focus trajectory. Keep up the sprint alignment!"
-            
-            _record_community_message(
-                req.community_id, f"agent_{req.community_id}", agent_name, "assistant", ai_reply, is_announcement=False
-            )
-            
-    return {"status": "success", "message": msg}
+        ai_reply = _generate_gemini(prompt)
+        
+        if not ai_reply:
+            if req.community_id == "ai-ml":
+                ai_reply = "Acknowledged. We should keep an eye on model overfitting when adjusting weights. Have you validated your training data profile?"
+            elif req.community_id == "full-stack":
+                ai_reply = "Excellent point. Always remember to decouple database calls from UI paint lifecycles to avoid bottlenecking."
+            else:
+                ai_reply = "Well observed. Regular energy logging is critical to maintaining a high focus trajectory. Keep up the sprint alignment!"
+        
+        ai_reply_msg = _record_community_message(
+            req.community_id, f"agent_{req.community_id}", agent_name, "assistant", ai_reply, is_announcement=False
+        )
+        
+    return {"status": "success", "message": msg, "ai_reply": ai_reply_msg}
 
 @app.post("/api/community/trigger-announcement")
 async def trigger_community_announcement(req: TriggerAnnouncementRequest):
