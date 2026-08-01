@@ -1,5 +1,9 @@
 import { useState } from "react";
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL !== undefined 
+  ? import.meta.env.VITE_BACKEND_URL 
+  : (import.meta.env.DEV ? 'http://localhost:8000' : '');
+
 export default function AiTutor() {
     const [topic, setTopic] = useState("");
     const [explanation, setExplanation] = useState("");
@@ -13,7 +17,7 @@ export default function AiTutor() {
         setExplanation("");
 
         try {
-            const response = await fetch("http://127.0.0.1:8000/api/tutor", {
+            const response = await fetch(`${BACKEND_URL}/api/tutor`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ topic }),

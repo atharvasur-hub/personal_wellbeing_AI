@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL !== undefined 
+  ? import.meta.env.VITE_BACKEND_URL 
+  : (import.meta.env.DEV ? 'http://localhost:8000' : '');
+
 export default function Login() {
     const [isLogin, setIsLogin] = useState(true); // Toggles between Login and Signup
 
@@ -29,14 +33,14 @@ export default function Login() {
                 formData.append("username", email);
                 formData.append("password", password);
 
-                response = await fetch("http://127.0.0.1:8000/login", {
+                response = await fetch(`${BACKEND_URL}/api/login`, {
                     method: "POST",
                     headers: { "Content-Type": "application/x-www-form-urlencoded" },
                     body: formData,
                 });
             } else {
                 // --- SIGNUP LOGIC ---
-                response = await fetch("http://127.0.0.1:8000/signup", {
+                response = await fetch(`${BACKEND_URL}/api/signup`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ name, email, password }),

@@ -2003,7 +2003,7 @@ class UserSignup(BaseModel):
     email: str
     password: str
 
-@app.post("/signup")
+@app.post("/api/signup")
 async def signup(user: UserSignup):
     try:
         conn = sqlite3.connect("users.db")
@@ -2020,7 +2020,7 @@ async def signup(user: UserSignup):
     except sqlite3.IntegrityError:
         raise HTTPException(status_code=400, detail="Identity Vector (Email) already registered.")
 
-@app.post("/login")
+@app.post("/api/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     conn = sqlite3.connect("users.db")
     cursor = conn.cursor()
