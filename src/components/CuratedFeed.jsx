@@ -13,6 +13,8 @@ import {
   AlertTriangle 
 } from 'lucide-react';
 import { fetchAIRecommendations } from '../lib/contentRecommender';
+import AudioPlayer from './AudioPlayer';
+import SpeechCard from './SpeechCard';
 
 export default function CuratedFeed({ isDarkMode = false, currentUser = null }) {
   const [items, setItems] = useState([]);
@@ -171,20 +173,28 @@ export default function CuratedFeed({ isDarkMode = false, currentUser = null }) 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {items.map((item, index) => {
             const isGap = item.isGapFix;
+            const contentType = item.contentType || item.content_type || item.type;
+
+            if (contentType === 'podcast') {
+              return <AudioPlayer key={index} item={item} isDarkMode={isDarkMode} />;
+            }
+            if (contentType === 'speech') {
+              return <SpeechCard key={index} item={item} isDarkMode={isDarkMode} />;
+            }
 
             // Choose icon and labels based on media type
             let TypeIcon = Play;
             let typeLabel = "The Core Concept";
-            if (item.type === 'video') {
+            if (contentType === 'video') {
               TypeIcon = Play;
               typeLabel = "Video Course";
-            } else if (item.type === 'short') {
+            } else if (contentType === 'short') {
               TypeIcon = Clock;
               typeLabel = "Quick Short";
-            } else if (item.type === 'reel') {
+            } else if (contentType === 'reel') {
               TypeIcon = Sparkles;
               typeLabel = "Visual Reel";
-            } else if (item.type === 'article') {
+            } else if (contentType === 'article') {
               TypeIcon = BookOpen;
               typeLabel = "Deep Dive";
             } else {
@@ -253,7 +263,7 @@ export default function CuratedFeed({ isDarkMode = false, currentUser = null }) 
                   </div>
 
                   {/* Thumbnail / Visual Block */}
-                  {item.type !== 'article' ? (
+                  {contentType !== 'article' ? (
                     <div className="relative rounded-2xl overflow-hidden aspect-video bg-slate-900 flex items-center justify-center shadow-md group-hover:scale-[1.02] transition-transform duration-300">
                       {thumbnailUrl ? (
                         <>
@@ -272,7 +282,7 @@ export default function CuratedFeed({ isDarkMode = false, currentUser = null }) 
                         <Play className="w-4 h-4 fill-current ml-0.5 text-violet-600" />
                       </div>
                       <span className="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/70 text-white font-mono text-[9px] font-bold backdrop-blur-xs">
-                        {item.type.toUpperCase()} • {item.duration}
+                        {(contentType || item.type).toUpperCase()} • {item.duration}
                       </span>
                     </div>
                   ) : (
