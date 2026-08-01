@@ -289,16 +289,54 @@ Keep responses concise (3-5 sentences max unless the user asks for detail).
 Always tie your advice directly to the user's stated goals and wellbeing.
 """.strip()
 
+def _get_user_profile_context(user_id: str) -> str:
+    profile = in_memory_db["user_profiles"].get(user_id)
+    deep_skill = in_memory_db["user_deep_skills"].get(user_id)
+    
+    name = profile.get("name") if profile else None
+    role = profile.get("role") if profile else None
+    aspiration = profile.get("aspiration") if profile else None
+    skills = deep_skill.get("skills") if deep_skill else None
+    condition = deep_skill.get("condition") if deep_skill else None
+
+    # Fallback to defaults
+    if not name or not role or not aspiration:
+        name = name or "Atharva Sur"
+        role = role or "Growth Catalyst • Tier 3"
+        aspiration = aspiration or "Senior AI Architect"
+    
+    skills_str = ", ".join(skills) if skills else "Systems Architecture, Deep Work Endurance, AI Alignment & Safety"
+    condition_str = condition or "Deep Skill Focus"
+    
+    context = (
+        f"User Session Information:\n"
+        f"- Name: {name}\n"
+        f"- Current Role: {role}\n"
+        f"- Career Goal/Aspiration: {aspiration}\n"
+        f"- Target Skills: {skills_str}\n"
+        f"- Current Condition: {condition_str}\n\n"
+        f"IMPORTANT GUIDANCE RULES FOR SYNAPSE AI:\n"
+        f"1. You are the 'brain' of the project. You must actively guide the user to bridge the gap between their current role ({role}) and their career goal ({aspiration}).\n"
+        f"2. Tailor your responses to focus on their target skills ({skills_str}).\n"
+        f"3. Incorporate their energy state/condition ({condition_str}) into recommendations. If they are burned out or seeking balance, advise recovery or time-boxing. If they are in deep focus, suggest intense, structured study sprints.\n"
+        f"4. Proactively prompt them with micro-steps they can take today to move closer to their goal."
+    )
+    return context
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     """Chatbot endpoint — powered by Gemini 2.0 Flash / 1.5 Flash."""
     user_id = req.user_id or "usr_default"
 
+    # Get user profile context to guide the user towards their goal
+    profile_context = _get_user_profile_context(user_id)
+
     context = "\n".join(
         f"{'User' if m.get('role') == 'user' else 'Synapse AI'}: {m.get('text') or m.get('content', '')}"
         for m in req.history[-6:]
     )
-    prompt = f"{CHAT_SYSTEM_PROMPT}\n\n"
+    prompt = f"{CHAT_SYSTEM_PROMPT}\n\n{profile_context}\n\n"
     if context:
         prompt += f"Conversation context:\n{context}\n\n"
     prompt += f"User: {req.message}\nSynapse AI:"

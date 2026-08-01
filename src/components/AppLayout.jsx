@@ -71,9 +71,34 @@ export default function AppLayout({ currentUser, onLogout }) {
     };
   }, []);
 
-  // Dynamic user data from Auth
-  const userName = currentUser?.name || 'Atharva Sur';
+  // Dynamic user data from Auth with local storage sync
+  const getStorageItem = (key, fallback) => {
+    if (currentUser?.id) {
+      return localStorage.getItem(`synapse_user_${currentUser.id}_${key}`) || fallback;
+    }
+    return localStorage.getItem(`synapse_profile_${key}`) || fallback;
+  };
+
+  const [userName, setUserName] = useState(() => getStorageItem('name', currentUser?.name || 'Atharva Sur'));
+  const [userRole, setUserRole] = useState(() => getStorageItem('role', 'Growth Catalyst • Tier 3'));
+  const [userAspiration, setUserAspiration] = useState(() => getStorageItem('aspiration', 'Senior AI Architect'));
+
   const userInitials = userName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'AS';
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setUserName(getStorageItem('name', currentUser?.name || 'Atharva Sur'));
+      setUserRole(getStorageItem('role', 'Growth Catalyst • Tier 3'));
+      setUserAspiration(getStorageItem('aspiration', 'Senior AI Architect'));
+    };
+    handleUpdate();
+    window.addEventListener('aspirationUpdated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('aspirationUpdated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, [currentUser]);
 
   // Reflection Modal States
   const [reflectionText, setReflectionText] = useState('');
@@ -197,7 +222,7 @@ export default function AppLayout({ currentUser, onLogout }) {
 
     saveChatMessageToSupabase('user', textToSend);
 
-    const result = await generateAIResponse(textToSend, aiInterfaceMessages);
+    const result = await generateAIResponse(textToSend, aiInterfaceMessages, currentUser?.id || 'usr_default');
 
     const aiMsg = {
       id: Date.now() + 1,
@@ -526,7 +551,7 @@ export default function AppLayout({ currentUser, onLogout }) {
                 </div>
 
                 {/* AGENTIC ONBOARDING & EMBEDDED MEDIA FEED FLOW */}
-                <AgenticOnboardingFlow isDarkMode={isDarkMode} />
+                <AgenticOnboardingFlow isDarkMode={isDarkMode} currentUser={currentUser} />
 
                 {/* PROMINENT AI CURATED FEED SECTION */}
                 <CuratedFeed isDarkMode={isDarkMode} currentUser={currentUser} />
@@ -728,8 +753,11 @@ export default function AppLayout({ currentUser, onLogout }) {
         onClose={() => setShowAssessmentModal(false)}
         currentUser={currentUser}
         isDarkMode={isDarkMode}
-        onAssessmentComplete={() => {
+        onAssessmentComplete={(data) => {
           setShowAssessmentModal(false);
+          setUserName(data.name);
+          setUserRole(data.role);
+          setUserAspiration(data.aspiration);
         }}
       />
 

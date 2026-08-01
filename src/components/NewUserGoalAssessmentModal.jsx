@@ -13,7 +13,12 @@ import {
   Flame,
   Award
 } from 'lucide-react';
-import { analyzeGoalWithAI } from '../lib/backendApi';
+import { 
+  analyzeGoalWithAI,
+  saveUserProfileToBackend,
+  saveAspirationToBackend,
+  trainDeepSkillModel
+} from '../lib/backendApi';
 
 export default function NewUserGoalAssessmentModal({ 
   isOpen, 
@@ -108,6 +113,43 @@ export default function NewUserGoalAssessmentModal({
       console.log('Backend API training fallback active');
     }
 
+    // Persist profile, aspirations, and skills to the FastAPI backend
+    const userId = currentUser?.id || 'usr_default';
+    try {
+      await saveUserProfileToBackend({
+        user_id: userId,
+        name: name,
+        role: role,
+        aspiration: finalGoal,
+        email: currentUser?.email || 'atharva@synapse.ai',
+        streak: '0-Day Focus Streak',
+        level: '1',
+        xp: '0',
+        focus_time: '0h 0m',
+        skills_verified: '0 Concepts',
+        goal_velocity: '0%',
+        vpm_index: '$0.00/min'
+      });
+    } catch (e) {
+      console.warn('Backend API saveUserProfileToBackend failed:', e);
+    }
+
+    try {
+      await saveAspirationToBackend({
+        user_id: userId,
+        aspiration: finalGoal,
+        target_timeline: timeline
+      });
+    } catch (e) {
+      console.warn('Backend API saveAspirationToBackend failed:', e);
+    }
+
+    try {
+      await trainDeepSkillModel(selectedSkills, condition, finalGoal, 'calibration', userId);
+    } catch (e) {
+      console.warn('Backend API trainDeepSkillModel failed:', e);
+    }
+
     await new Promise(r => setTimeout(r, 900));
     setAiStatusMessage('Calibrating Identity Graph baseline weights and VPM performance metrics...');
 
@@ -138,6 +180,9 @@ export default function NewUserGoalAssessmentModal({
     setKey('skills', JSON.stringify(selectedSkills));
 
     setLoading(false);
+
+    // Notify other components about the aspiration update
+    window.dispatchEvent(new Event('aspirationUpdated'));
 
     if (onAssessmentComplete) {
       onAssessmentComplete({
