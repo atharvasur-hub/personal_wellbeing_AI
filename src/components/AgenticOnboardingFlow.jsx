@@ -134,7 +134,7 @@ function MediaCard({ item, index, isDarkMode }) {
 // -----------------------------------------------
 // MAIN COMPONENT
 // -----------------------------------------------
-export default function AgenticOnboardingFlow({ isDarkMode = false }) {
+export default function AgenticOnboardingFlow({ isDarkMode = false, currentUser = null }) {
   const [step, setStep] = useState('chat'); // 'chat' | 'curating' | 'feed'
   const [messages, setMessages] = useState([
     {
@@ -205,14 +205,18 @@ export default function AgenticOnboardingFlow({ isDarkMode = false }) {
     setStep('curating');
     setCuratingStep(0);
 
-    // Save to Backend API & Supabase
-    saveAspirationToBackend(goalText);
+    // Save to Backend API & Supabase with correct object format
+    const userId = currentUser?.id || 'usr_default';
+    saveAspirationToBackend({ aspiration: goalText, user_id: userId });
     saveUserAspirationToSupabase({
       primary_goal: goalText,
       current_mood: 'focused',
       fatigue_level: 'low',
       intent_vector: { source: 'onboarding_chat' }
     });
+
+    // Notify other components about the aspiration update
+    window.dispatchEvent(new Event('aspirationUpdated'));
 
     // Fetch AI recommendations (Gemini + fallback)
     const recs = await fetchAIRecommendations(goalText);

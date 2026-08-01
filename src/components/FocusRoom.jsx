@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { saveFocusSessionToBackend } from '../lib/backendApi';
 
-export default function FocusRoom({ isDarkMode = false }) {
+export default function FocusRoom({ isDarkMode = false, currentUser }) {
   // Manual Time Input States (Hours & Minutes)
   const [inputHours, setInputHours] = useState(0);
   const [inputMinutes, setInputMinutes] = useState(25);
@@ -107,29 +107,49 @@ export default function FocusRoom({ isDarkMode = false }) {
     if (isActive && !isPaused && secondsLeft > 0) {
       interval = setInterval(() => {
         setSecondsLeft(prev => prev - 1);
-
-        // Accumulate active focus time in localStorage
-        const prevSecs = parseInt(localStorage.getItem('synapse_focus_seconds_total') || '0', 10);
-        const updatedSecs = prevSecs + 1;
-        localStorage.setItem('synapse_focus_seconds_total', updatedSecs.toString());
-
-        const hrs = Math.floor(updatedSecs / 3600);
-        const mins = Math.floor((updatedSecs % 3600) / 60);
-        const secs = updatedSecs % 60;
-
-        let formatted = '0h 0m';
-        if (hrs > 0) {
-          formatted = `${hrs}h ${mins}m`;
-        } else if (mins > 0) {
-          formatted = `0h ${mins}m`;
-        } else if (secs > 0) {
-          formatted = `${secs}s`;
-        }
-        localStorage.setItem('synapse_profile_focus_time', formatted);
       }, 1000);
     } else if (secondsLeft === 0 && isActive) {
       setIsActive(false);
       setIsCompleted(true);
+
+      // Accumulate completed session duration in localStorage after session completion
+      const prevSecs = parseInt(localStorage.getItem('synapse_focus_seconds_total') || '0', 10);
+      const updatedSecs = prevSecs + totalSeconds;
+      localStorage.setItem('synapse_focus_seconds_total', updatedSecs.toString());
+
+      // Calculate percentage increase
+      let pctIncrease = 0;
+      if (prevSecs > 0) {
+        pctIncrease = (totalSeconds / prevSecs) * 100;
+      } else {
+        pctIncrease = 100.0;
+      }
+      const trendStr = `+${pctIncrease.toFixed(1)}%`;
+      localStorage.setItem('synapse_profile_focus_time_trend', trendStr);
+      if (currentUser?.id) {
+        localStorage.setItem(`synapse_user_${currentUser.id}_focus_time_trend`, trendStr);
+      }
+
+      const hrs = Math.floor(updatedSecs / 3600);
+      const mins = Math.floor((updatedSecs % 3600) / 60);
+      const secs = updatedSecs % 60;
+
+      let formatted = '0h 0m';
+      if (hrs > 0) {
+        formatted = `${hrs}h ${mins}m`;
+      } else if (mins > 0) {
+        formatted = `0h ${mins}m`;
+      } else if (secs > 0) {
+        formatted = `${secs}s`;
+      }
+      localStorage.setItem('synapse_profile_focus_time', formatted);
+      if (currentUser?.id) {
+        localStorage.setItem(`synapse_user_${currentUser.id}_focus_time`, formatted);
+      }
+
+      // Dispatch layout events for reactivity
+      window.dispatchEvent(new Event('aspirationUpdated'));
+      window.dispatchEvent(new Event('storage'));
 
       saveFocusSessionToBackend({
         task_name: focusTask,
@@ -138,7 +158,7 @@ export default function FocusRoom({ isDarkMode = false }) {
       });
     }
     return () => clearInterval(interval);
-  }, [isActive, isPaused, secondsLeft, totalSeconds, focusTask]);
+  }, [isActive, isPaused, secondsLeft, totalSeconds, focusTask, currentUser]);
 
   // 3. BLOCK CLOSING WEBSITE (beforeunload Event Listener)
   useEffect(() => {
@@ -454,6 +474,14 @@ export default function FocusRoom({ isDarkMode = false }) {
             >
               <RotateCcw className="w-4 h-4" />
               <span>Cancel Sprint</span>
+            </button>
+
+            <button
+              onClick={() => setSecondsLeft(3)}
+              className="px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 hover:bg-amber-500/20 transition cursor-pointer"
+              title="Fast forward to 3 seconds remaining for testing completed session"
+            >
+              <span>Fast Forward</span>
             </button>
           </div>
         </div>

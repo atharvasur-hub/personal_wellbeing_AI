@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ResponsiveContainer, 
   RadarChart, 
@@ -27,19 +27,52 @@ interface IdentityAspirationsGraphProps {
 }
 
 export default function IdentityAspirationsGraph({ isDarkMode = false }: IdentityAspirationsGraphProps) {
-  const [data, setData] = useState(() => {
-    // Check if user has initialized / completed sprints
-    const levelStr = localStorage.getItem('synapse_profile_level') || '1';
-    const xpStr = localStorage.getItem('synapse_profile_xp') || '0';
-    const xpVal = parseInt(xpStr.replace(/,/g, '')) || 0;
-    const isNewUser = parseInt(levelStr) <= 1 && xpVal === 0;
+  const [data, setData] = useState<{ subject: string; Target: number; Current: number; fullMark: number }[]>([]);
 
-    return defaultSkillNodes.map(node => ({
-      ...node,
-      Current: isNewUser ? 0 : Math.round(node.Target * 0.7),
-      fullMark: 100
-    }));
-  });
+  useEffect(() => {
+    const handleUpdate = () => {
+      const levelStr = localStorage.getItem('synapse_profile_level') || '1';
+      const xpStr = localStorage.getItem('synapse_profile_xp') || '0';
+      const xpVal = parseInt(xpStr.replace(/,/g, '')) || 0;
+      const isNewUser = parseInt(levelStr) <= 1 && xpVal === 0;
+
+      const savedTopicsStr = localStorage.getItem('synapse_user_feed_topics');
+      if (savedTopicsStr) {
+        try {
+          const topics = JSON.parse(savedTopicsStr);
+          if (Array.isArray(topics) && topics.length > 0) {
+            setData(topics.map((topic, index) => {
+              const targets = [95, 90, 85, 92, 96];
+              const targetVal = targets[index % targets.length];
+              return {
+                subject: topic,
+                Target: targetVal,
+                Current: isNewUser ? 0 : Math.round(targetVal * 0.7),
+                fullMark: 100
+              };
+            }));
+            return;
+          }
+        } catch (e) {
+          console.warn('Failed to parse dynamic topics', e);
+        }
+      }
+
+      setData(defaultSkillNodes.map(node => ({
+        ...node,
+        Current: isNewUser ? 0 : Math.round(node.Target * 0.7),
+        fullMark: 100
+      })));
+    };
+
+    handleUpdate();
+    window.addEventListener('aspirationUpdated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('aspirationUpdated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, []);
 
   const [activeSeries, setActiveSeries] = useState<'both' | 'current' | 'target'>('both');
 

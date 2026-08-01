@@ -12,6 +12,7 @@ import {
 interface VpmMetricsRowProps {
   isDarkMode?: boolean;
   focusTime?: string;
+  focusTimeTrend?: string;
   skillsVerified?: string;
   goalVelocity?: string;
   vpmIndex?: string;
@@ -20,12 +21,15 @@ interface VpmMetricsRowProps {
 export default function VpmMetricsRow({ 
   isDarkMode = false,
   focusTime,
+  focusTimeTrend,
   skillsVerified,
   goalVelocity,
   vpmIndex
 }: VpmMetricsRowProps) {
   // Priority: Prop -> localStorage -> Default Fallback (0h 0m until user spends time in Focus Room)
   const displayFocusTime = focusTime || localStorage.getItem('synapse_profile_focus_time') || '0h 0m';
+  const focusSecs = parseInt(localStorage.getItem('synapse_focus_seconds_total') || '0', 10);
+  const displayFocusTrend = focusTimeTrend || localStorage.getItem('synapse_profile_focus_time_trend') || (focusSecs === 0 ? '+0.0%' : '+18.4%');
   const displaySkills = skillsVerified || localStorage.getItem('synapse_profile_skills_verified') || '12 Concepts';
   const displayVelocity = goalVelocity || localStorage.getItem('synapse_profile_goal_velocity') || '84%';
   const displayVpm = vpmIndex || localStorage.getItem('synapse_profile_vpm_index') || '$4.82/min';
@@ -36,7 +40,7 @@ export default function VpmMetricsRow({
       title: 'Focus Time Reclaimed',
       value: displayFocusTime,
       subtext: 'this week',
-      change: '+18.4%',
+      change: displayFocusTrend,
       isPositive: true,
       icon: Clock,
       gradient: isDarkMode ? 'from-emerald-500/20 via-teal-500/10 to-transparent' : 'from-emerald-100 via-teal-50 to-transparent',
@@ -72,25 +76,11 @@ export default function VpmMetricsRow({
       iconColor: isDarkMode ? 'text-amber-400 bg-amber-500/10 border-amber-500/20' : 'text-amber-700 bg-amber-50 border-amber-200',
       badgeColor: isDarkMode ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-800 border-amber-200',
       description: 'Calculated trajectory towards Target Career Goal.'
-    },
-    {
-      id: 'vpm_index',
-      title: 'Value per Minute (VPM)',
-      value: displayVpm,
-      subtext: 'Cognitive ROI',
-      change: '+24% VPM Boost',
-      isPositive: true,
-      icon: TrendingUp,
-      gradient: isDarkMode ? 'from-cyan-500/20 via-blue-500/10 to-transparent' : 'from-cyan-100 via-teal-50 to-transparent',
-      borderColor: isDarkMode ? 'border-cyan-500/30' : 'border-teal-200',
-      iconColor: isDarkMode ? 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20' : 'text-teal-700 bg-teal-50 border-teal-200',
-      badgeColor: isDarkMode ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' : 'bg-teal-50 text-teal-800 border-teal-200',
-      description: 'High-value synthesis vs passive media consumption.'
     }
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 w-full">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 w-full">
       {metrics.map((m) => {
         const IconComponent = m.icon;
         return (
