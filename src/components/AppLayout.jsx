@@ -17,7 +17,14 @@ import {
   Moon,
   Sun,
   ShieldCheck,
-  LogOut
+  LogOut,
+  Zap,
+  Trophy,
+  ArrowLeft,
+  Bot,
+  Send,
+  RefreshCw,
+  X
 } from 'lucide-react';
 import CuratedFeed from './CuratedFeed';
 import AgenticOnboardingFlow from './AgenticOnboardingFlow';
