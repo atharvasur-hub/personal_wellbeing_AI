@@ -385,7 +385,12 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
 
         {/* 3. Generative "Future Self" Trajectory Simulator */}
         <div className="grid grid-cols-1 gap-8">
-          <FutureSelfSimulator isDarkMode={isDarkMode} />
+          <FutureSelfSimulator 
+            isDarkMode={isDarkMode} 
+            userXP={userXP}
+            focusTime={focusTime}
+            focusStreak={focusStreak}
+          />
         </div>
         {/* Bottom Feature Nodes Matrix & Summary */}
         <div className={`rounded-3xl border p-6 sm:p-8 flex flex-col gap-6 transition-all ${
