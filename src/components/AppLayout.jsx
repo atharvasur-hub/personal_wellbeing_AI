@@ -38,7 +38,6 @@ import CuratedFeed from './CuratedFeed';
 import AgenticOnboardingFlow from './AgenticOnboardingFlow';
 import HabitSteeringModal from './HabitSteeringModal';
 import FocusRoom from './FocusRoom';
-import UserJourneyTimeline from './UserJourneyTimeline';
 import {
   fetchChatHistoryFromSupabase,
   saveChatMessageToSupabase,
@@ -47,6 +46,7 @@ import {
   supabase
 } from '../lib/supabaseClient';
 import { generateAIResponse } from '../lib/aiService';
+import { checkBackendHealth } from '../lib/backendApi';
 
 export default function AppLayout({ currentUser, onLogout }) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
@@ -244,8 +244,8 @@ export default function AppLayout({ currentUser, onLogout }) {
       {/* Sidebar Navigation */}
       <aside
         className={`border-r flex flex-col justify-between shrink-0 transition-all duration-300 relative ${isDarkMode
-            ? 'bg-slate-900 border-slate-800/80 text-slate-100'
-            : 'bg-[#FAF8F7] border-stone-200/50 text-stone-900'
+          ? 'bg-slate-900 border-slate-800/80 text-slate-100'
+          : 'bg-[#FAF8F7] border-stone-200/50 text-stone-900'
           } ${sidebarCollapsed ? 'w-20 p-4' : 'w-72 p-6'}`}
       >
         <div>
@@ -254,8 +254,8 @@ export default function AppLayout({ currentUser, onLogout }) {
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               className={`w-10 h-10 rounded-full border shadow-sm flex items-center justify-center transition hover:shadow-md cursor-pointer ${isDarkMode
-                  ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
-                  : 'bg-white border-stone-200/60 text-stone-600 hover:text-stone-900'
+                ? 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                : 'bg-white border-stone-200/60 text-stone-600 hover:text-stone-900'
                 }`}
               title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
             >
@@ -281,17 +281,17 @@ export default function AppLayout({ currentUser, onLogout }) {
                   key={item.id}
                   onClick={() => setActiveMenu(item.id)}
                   className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-sm font-semibold transition-all duration-200 relative group cursor-pointer ${isActive
-                      ? isDarkMode
-                        ? 'bg-indigo-500/15 text-indigo-300 font-bold border border-indigo-500/30 shadow-indigo-500/10'
-                        : 'bg-white text-stone-900 font-bold shadow-sm border border-stone-100'
-                      : isDarkMode
-                        ? 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
-                        : 'text-stone-500 hover:text-stone-900 hover:bg-white/60'
+                    ? isDarkMode
+                      ? 'bg-indigo-500/15 text-indigo-300 font-bold border border-indigo-500/30 shadow-indigo-500/10'
+                      : 'bg-white text-stone-900 font-bold shadow-sm border border-stone-100'
+                    : isDarkMode
+                      ? 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+                      : 'text-stone-500 hover:text-stone-900 hover:bg-white/60'
                     }`}
                 >
                   <ItemIcon className={`w-5 h-5 shrink-0 transition-transform ${isActive
-                      ? isDarkMode ? 'text-indigo-400 scale-105' : 'text-teal-500 scale-105'
-                      : 'text-stone-400 group-hover:scale-105'
+                    ? isDarkMode ? 'text-indigo-400 scale-105' : 'text-teal-500 scale-105'
+                    : 'text-stone-400 group-hover:scale-105'
                     }`} />
                   {!sidebarCollapsed && <span className="animate-fade-in">{item.label}</span>}
 
@@ -309,13 +309,13 @@ export default function AppLayout({ currentUser, onLogout }) {
 
         {/* User Profile Capsule & Logout */}
         <div className={`p-3 rounded-2xl border shadow-sm flex items-center justify-between transition-opacity duration-300 ${isDarkMode
-            ? 'bg-slate-900/90 border-slate-800 text-slate-100'
-            : 'bg-white/80 border-stone-200/50 text-stone-900'
+          ? 'bg-slate-900/90 border-slate-800 text-slate-100'
+          : 'bg-white/80 border-stone-200/50 text-stone-900'
           }`}>
           <div className="flex items-center gap-3 overflow-hidden">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-white text-xs shadow-sm shrink-0 ${isDarkMode
-                ? 'bg-gradient-to-tr from-indigo-500 to-violet-500'
-                : 'bg-gradient-to-tr from-teal-400 to-cyan-500'
+              ? 'bg-gradient-to-tr from-indigo-500 to-violet-500'
+              : 'bg-gradient-to-tr from-teal-400 to-cyan-500'
               }`}>
               {userInitials}
             </div>
@@ -331,8 +331,8 @@ export default function AppLayout({ currentUser, onLogout }) {
             <button
               onClick={onLogout}
               className={`p-2 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer ${isDarkMode
-                  ? 'bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20'
-                  : 'bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-100'
+                ? 'bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20'
+                : 'bg-rose-50 border-rose-100 text-rose-600 hover:bg-rose-100'
                 }`}
               title="Log Out of Session"
             >
@@ -345,8 +345,8 @@ export default function AppLayout({ currentUser, onLogout }) {
 
       {/* Main Content Area */}
       <main className={`flex-1 flex flex-col min-w-0 overflow-hidden relative transition-colors duration-300 ${isDarkMode
-          ? 'bg-gradient-to-br from-slate-950 via-[#0D1322] to-slate-950'
-          : 'bg-gradient-to-br from-[#F5EFEF] via-[#E8F5F1] to-[#FAFAF9]'
+        ? 'bg-gradient-to-br from-slate-950 via-[#0D1322] to-slate-950'
+        : 'bg-gradient-to-br from-[#F5EFEF] via-[#E8F5F1] to-[#FAFAF9]'
         }`}>
 
         {/* Top Header */}
@@ -361,11 +361,19 @@ export default function AppLayout({ currentUser, onLogout }) {
             </span>
 
             <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-mono font-bold ${supabase
-                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600'
-                : 'bg-stone-500/10 border-stone-500/20 text-stone-400'
+              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600'
+              : 'bg-stone-500/10 border-stone-500/20 text-stone-400'
               }`}>
               <Database className="w-3 h-3" />
-              <span>{supabase ? 'SUPABASE POSTGRES: CONNECTED' : 'SUPABASE: DEMO MODE'}</span>
+              <span>{supabase ? 'SUPABASE: CONNECTED' : 'SUPABASE: DEMO'}</span>
+            </div>
+
+            <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-mono font-bold ${backendOnline
+                ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600'
+                : 'bg-stone-500/10 border-stone-500/20 text-stone-400'
+              }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${backendOnline ? 'bg-indigo-500 animate-pulse' : 'bg-stone-400'}`} />
+              <span>{backendOnline ? 'FASTAPI: LIVE' : 'FASTAPI: OFFLINE'}</span>
             </div>
           </div>
 
@@ -373,8 +381,8 @@ export default function AppLayout({ currentUser, onLogout }) {
             <button
               onClick={() => setShowHabitModal(true)}
               className={`px-3 py-2 rounded-full border shadow-sm flex items-center gap-1.5 text-xs font-extrabold transition cursor-pointer ${isDarkMode
-                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
-                  : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+                : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
                 }`}
               title="Test Digital Guardian Habit Intercept"
             >
@@ -386,8 +394,8 @@ export default function AppLayout({ currentUser, onLogout }) {
               <button
                 onClick={onLogout}
                 className={`px-3 py-2 rounded-full border shadow-sm flex items-center gap-1.5 text-xs font-extrabold transition-all duration-300 cursor-pointer ${isDarkMode
-                    ? 'bg-slate-900 border-rose-500/40 text-rose-400 hover:bg-rose-500/10'
-                    : 'bg-white border-stone-200/80 text-rose-600 hover:bg-rose-50'
+                  ? 'bg-slate-900 border-rose-500/40 text-rose-400 hover:bg-rose-500/10'
+                  : 'bg-white border-stone-200/80 text-rose-600 hover:bg-rose-50'
                   }`}
                 title="Log Out of Session"
               >
@@ -399,8 +407,8 @@ export default function AppLayout({ currentUser, onLogout }) {
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               className={`px-3.5 py-2 rounded-full border shadow-sm flex items-center gap-2 text-xs font-extrabold transition-all duration-300 cursor-pointer ${isDarkMode
-                  ? 'bg-slate-900 border-indigo-500/40 text-indigo-300 hover:bg-slate-800'
-                  : 'bg-white border-stone-200/80 text-stone-700 hover:bg-stone-50'
+                ? 'bg-slate-900 border-indigo-500/40 text-indigo-300 hover:bg-slate-800'
+                : 'bg-white border-stone-200/80 text-stone-700 hover:bg-stone-50'
                 }`}
               title="Toggle Dark / Light Mode"
             >
@@ -420,8 +428,8 @@ export default function AppLayout({ currentUser, onLogout }) {
             <button
               onClick={() => setShowReflection(true)}
               className={`w-10 h-10 rounded-full border shadow-sm flex items-center justify-center transition hover:shadow-md cursor-pointer ${isDarkMode
-                  ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-indigo-400 hover:border-indigo-500/40'
-                  : 'bg-white border-stone-200/60 text-stone-700 hover:text-teal-600'
+                ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-indigo-400 hover:border-indigo-500/40'
+                : 'bg-white border-stone-200/60 text-stone-700 hover:text-teal-600'
                 }`}
               title="Daily Reflection"
             >
@@ -431,8 +439,8 @@ export default function AppLayout({ currentUser, onLogout }) {
             <button
               onClick={() => setShowNotifications(!showNotifications)}
               className={`w-10 h-10 rounded-full border shadow-sm flex items-center justify-center transition relative hover:shadow-md cursor-pointer ${isDarkMode
-                  ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-indigo-400 hover:border-indigo-500/40'
-                  : 'bg-white border-stone-200/60 text-stone-700 hover:text-teal-600'
+                ? 'bg-slate-900 border-slate-800 text-slate-300 hover:text-indigo-400 hover:border-indigo-500/40'
+                : 'bg-white border-stone-200/60 text-stone-700 hover:text-teal-600'
                 }`}
               title="Notifications"
             >
@@ -459,8 +467,8 @@ export default function AppLayout({ currentUser, onLogout }) {
                     <div
                       key={notif.id}
                       className={`p-3 rounded-2xl border text-xs leading-relaxed flex flex-col gap-1 transition ${notif.read
-                          ? isDarkMode ? 'bg-slate-950/40 border-slate-800/50 text-slate-500' : 'bg-stone-50 border-stone-100 text-stone-400'
-                          : isDarkMode ? 'bg-indigo-500/10 border-indigo-500/20 text-slate-300' : 'bg-teal-50/50 border-teal-100 text-stone-700'
+                        ? isDarkMode ? 'bg-slate-950/40 border-slate-800/50 text-slate-500' : 'bg-stone-50 border-stone-100 text-stone-400'
+                        : isDarkMode ? 'bg-indigo-500/10 border-indigo-500/20 text-slate-300' : 'bg-teal-50/50 border-teal-100 text-stone-700'
                         }`}
                     >
                       <p>{notif.text}</p>
@@ -487,8 +495,8 @@ export default function AppLayout({ currentUser, onLogout }) {
                     }`}>
                     Welcome back,<br />
                     <span className={`text-transparent bg-clip-text ${isDarkMode
-                        ? 'bg-gradient-to-r from-indigo-400 via-violet-400 to-teal-300'
-                        : 'bg-gradient-to-r from-teal-400 to-cyan-500'
+                      ? 'bg-gradient-to-r from-indigo-400 via-violet-400 to-teal-300'
+                      : 'bg-gradient-to-r from-teal-400 to-cyan-500'
                       }`}>
                       {userName}
                     </span>
@@ -509,12 +517,12 @@ export default function AppLayout({ currentUser, onLogout }) {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* 1. Baseline Metrics Card */}
                   <div className={`rounded-3xl p-6 md:p-8 border relative overflow-hidden flex flex-col justify-between min-h-[360px] group transition-all duration-300 ${isDarkMode
-                      ? 'bg-slate-900/90 border-slate-800 text-slate-100 shadow-xl shadow-indigo-500/5 hover:border-indigo-500/30'
-                      : 'bg-white border-stone-100/80 text-stone-900 shadow-sm hover:shadow-md'
+                    ? 'bg-slate-900/90 border-slate-800 text-slate-100 shadow-xl shadow-indigo-500/5 hover:border-indigo-500/30'
+                    : 'bg-white border-stone-100/80 text-stone-900 shadow-sm hover:shadow-md'
                     }`}>
                     <div className={`absolute top-0 left-0 right-0 h-1.5 rounded-t-3xl ${isDarkMode
-                        ? 'bg-gradient-to-r from-indigo-500 via-violet-500 to-teal-400'
-                        : 'bg-gradient-to-r from-teal-400 to-cyan-400'
+                      ? 'bg-gradient-to-r from-indigo-500 via-violet-500 to-teal-400'
+                      : 'bg-gradient-to-r from-teal-400 to-cyan-400'
                       }`} />
 
                     <div>
@@ -531,8 +539,8 @@ export default function AppLayout({ currentUser, onLogout }) {
                         </div>
 
                         <span className={`px-3.5 py-1 rounded-full text-xs font-bold border ${isDarkMode
-                            ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20'
-                            : 'bg-teal-50/80 text-teal-700 border-teal-100'
+                          ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20'
+                          : 'bg-teal-50/80 text-teal-700 border-teal-100'
                           }`}>
                           12 active nodes
                         </span>
@@ -545,8 +553,8 @@ export default function AppLayout({ currentUser, onLogout }) {
 
                       <div className="flex flex-wrap gap-3">
                         <div className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-full text-xs font-bold shadow-2xs transition cursor-pointer ${isDarkMode
-                            ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25'
-                            : 'bg-indigo-50/80 text-indigo-900 border border-indigo-100 hover:bg-indigo-100/60'
+                          ? 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/25'
+                          : 'bg-indigo-50/80 text-indigo-900 border border-indigo-100 hover:bg-indigo-100/60'
                           }`}>
                           <span>Deep Learning</span>
                           <span className={`px-2 py-0.5 rounded-full font-extrabold text-[10px] shadow-2xs ${isDarkMode ? 'bg-indigo-950 text-indigo-400' : 'bg-white text-indigo-600'
@@ -554,8 +562,8 @@ export default function AppLayout({ currentUser, onLogout }) {
                         </div>
 
                         <div className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-full text-xs font-bold shadow-2xs transition cursor-pointer ${isDarkMode
-                            ? 'bg-teal-500/15 text-teal-300 border border-teal-500/30 hover:bg-teal-500/25'
-                            : 'bg-teal-50/80 text-teal-900 border border-teal-100 hover:bg-teal-100/60'
+                          ? 'bg-teal-500/15 text-teal-300 border border-teal-500/30 hover:bg-teal-500/25'
+                          : 'bg-teal-50/80 text-teal-900 border border-teal-100 hover:bg-teal-100/60'
                           }`}>
                           <span>React Performance</span>
                           <span className={`px-2 py-0.5 rounded-full font-extrabold text-[10px] shadow-2xs ${isDarkMode ? 'bg-teal-950 text-teal-400' : 'bg-white text-teal-600'
@@ -563,8 +571,8 @@ export default function AppLayout({ currentUser, onLogout }) {
                         </div>
 
                         <div className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-full text-xs font-bold shadow-2xs transition cursor-pointer ${isDarkMode
-                            ? 'bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/25'
-                            : 'bg-purple-50/80 text-purple-900 border border-purple-100 hover:bg-purple-100/60'
+                          ? 'bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/25'
+                          : 'bg-purple-50/80 text-purple-900 border border-purple-100 hover:bg-purple-100/60'
                           }`}>
                           <span>Circadian Sleep</span>
                           <span className={`px-2 py-0.5 rounded-full font-extrabold text-[10px] shadow-2xs ${isDarkMode ? 'bg-violet-950 text-violet-400' : 'bg-white text-purple-600'
@@ -572,8 +580,8 @@ export default function AppLayout({ currentUser, onLogout }) {
                         </div>
 
                         <div className={`inline-flex items-center gap-2.5 px-4 py-2 rounded-full text-xs font-bold shadow-2xs transition cursor-pointer ${isDarkMode
-                            ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25'
-                            : 'bg-amber-50/80 text-amber-900 border border-amber-100 hover:bg-amber-100/60'
+                          ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25'
+                          : 'bg-amber-50/80 text-amber-900 border border-amber-100 hover:bg-amber-100/60'
                           }`}>
                           <span>Stoicism</span>
                           <span className={`px-2 py-0.5 rounded-full font-extrabold text-[10px] shadow-2xs ${isDarkMode ? 'bg-amber-950 text-amber-400' : 'bg-white text-amber-600'
@@ -592,12 +600,12 @@ export default function AppLayout({ currentUser, onLogout }) {
 
                   {/* 2. Goal Roadmap Card */}
                   <div className={`rounded-3xl p-6 md:p-8 border relative overflow-hidden flex flex-col justify-between min-h-[360px] group transition-all duration-300 ${isDarkMode
-                      ? 'bg-slate-900/90 border-slate-800 text-slate-100 shadow-xl shadow-indigo-500/5 hover:border-indigo-500/30'
-                      : 'bg-white border-stone-100/80 text-stone-900 shadow-sm hover:shadow-md'
+                    ? 'bg-slate-900/90 border-slate-800 text-slate-100 shadow-xl shadow-indigo-500/5 hover:border-indigo-500/30'
+                    : 'bg-white border-stone-100/80 text-stone-900 shadow-sm hover:shadow-md'
                     }`}>
                     <div className={`absolute top-0 left-0 right-0 h-1.5 rounded-t-3xl ${isDarkMode
-                        ? 'bg-gradient-to-r from-indigo-500 via-violet-500 to-teal-400'
-                        : 'bg-gradient-to-r from-teal-400 to-cyan-400'
+                      ? 'bg-gradient-to-r from-indigo-500 via-violet-500 to-teal-400'
+                      : 'bg-gradient-to-r from-teal-400 to-cyan-400'
                       }`} />
 
                     <div>
@@ -614,8 +622,8 @@ export default function AppLayout({ currentUser, onLogout }) {
                         </div>
 
                         <span className={`px-3 py-1 rounded-full text-xs font-extrabold border ${isDarkMode
-                            ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20'
-                            : 'bg-teal-50 text-teal-700 border-teal-100'
+                          ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20'
+                          : 'bg-teal-50 text-teal-700 border-teal-100'
                           }`}>
                           Velocity 8.4
                         </span>
@@ -640,8 +648,8 @@ export default function AppLayout({ currentUser, onLogout }) {
                               <Circle className={`w-4 h-4 shrink-0 ${isDarkMode ? 'text-slate-600' : 'text-stone-300'}`} />
                             )}
                             <span className={`${item.completed
-                                ? isDarkMode ? 'line-through text-slate-500' : 'line-through text-stone-400'
-                                : isDarkMode ? 'text-slate-200 font-semibold' : 'text-stone-700 font-semibold'
+                              ? isDarkMode ? 'line-through text-slate-500' : 'line-through text-stone-400'
+                              : isDarkMode ? 'text-slate-200 font-semibold' : 'text-stone-700 font-semibold'
                               }`}>
                               {item.text}
                             </span>
@@ -675,7 +683,7 @@ export default function AppLayout({ currentUser, onLogout }) {
               <FocusRoom isDarkMode={isDarkMode} />
             )}
 
-            {/* FULL PROFILE & TRAJECTORY VIEW */}
+            {/* FULL PROFILE & VPM DASHBOARD VIEW */}
             {activeMenu === 'profile' && (
               <div className="flex flex-col gap-10">
 
@@ -993,8 +1001,8 @@ export default function AppLayout({ currentUser, onLogout }) {
       <button
         onClick={() => setShowAIChatInterface(true)}
         className={`fixed bottom-8 right-8 z-40 w-14 h-14 rounded-full text-white shadow-xl border-2 flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-300 group cursor-pointer ${isDarkMode
-            ? 'bg-gradient-to-tr from-indigo-500 via-violet-600 to-teal-400 border-slate-800 shadow-indigo-500/30'
-            : 'bg-gradient-to-tr from-teal-400 via-cyan-500 to-indigo-500 border-white shadow-teal-500/25'
+          ? 'bg-gradient-to-tr from-indigo-500 via-violet-600 to-teal-400 border-slate-800 shadow-indigo-500/30'
+          : 'bg-gradient-to-tr from-teal-400 via-cyan-500 to-indigo-500 border-white shadow-teal-500/25'
           }`}
         title="Launch Synapse AI Assistant Interface"
       >
@@ -1007,8 +1015,8 @@ export default function AppLayout({ currentUser, onLogout }) {
       {/* DEDICATED FULL AI INTERFACE OVERLAY */}
       {showAIChatInterface && (
         <div className={`fixed inset-0 z-50 flex flex-col animate-fade-in ${isDarkMode
-            ? 'bg-slate-950 text-slate-100'
-            : 'bg-gradient-to-br from-[#F5EFEF] via-[#E8F5F1] to-[#FAFAF9] text-stone-900'
+          ? 'bg-slate-950 text-slate-100'
+          : 'bg-gradient-to-br from-[#F5EFEF] via-[#E8F5F1] to-[#FAFAF9] text-stone-900'
           }`}>
 
           {/* AI Interface Header */}
@@ -1122,8 +1130,8 @@ export default function AppLayout({ currentUser, onLogout }) {
 
                   <div className="flex flex-col gap-2">
                     <div className={`p-4 rounded-3xl border text-xs md:text-sm leading-relaxed shadow-xs ${msg.role === 'user'
-                        ? 'bg-teal-500 text-white border-teal-400 rounded-tr-none'
-                        : isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-200 rounded-tl-none' : 'bg-white border-stone-100 text-stone-800 rounded-tl-none'
+                      ? 'bg-teal-500 text-white border-teal-400 rounded-tr-none'
+                      : isDarkMode ? 'bg-slate-900 border-slate-800 text-slate-200 rounded-tl-none' : 'bg-white border-stone-100 text-stone-800 rounded-tl-none'
                       }`}>
                       {msg.text}
                     </div>
@@ -1135,8 +1143,8 @@ export default function AppLayout({ currentUser, onLogout }) {
                             key={idx}
                             onClick={() => handleSendAiInterface(sug)}
                             className={`px-3 py-1.5 rounded-full border text-[11px] font-bold transition shadow-2xs cursor-pointer ${isDarkMode
-                                ? 'bg-slate-900 border-slate-800 text-indigo-300 hover:bg-slate-800 hover:border-indigo-500/40'
-                                : 'bg-white border-stone-200/80 text-teal-700 hover:bg-teal-50 hover:border-teal-200'
+                              ? 'bg-slate-900 border-slate-800 text-indigo-300 hover:bg-slate-800 hover:border-indigo-500/40'
+                              : 'bg-white border-stone-200/80 text-teal-700 hover:bg-teal-50 hover:border-teal-200'
                               }`}
                           >
                             + {sug}
@@ -1173,8 +1181,8 @@ export default function AppLayout({ currentUser, onLogout }) {
                 onChange={(e) => setAiInputText(e.target.value)}
                 placeholder="Ask Synapse AI anything about your growth, habits, or aspirations..."
                 className={`flex-1 border rounded-2xl px-5 py-3.5 text-xs md:text-sm focus:outline-none transition shadow-2xs ${isDarkMode
-                    ? 'bg-slate-950 border-slate-800 text-slate-200 placeholder-slate-500 focus:border-indigo-500/40'
-                    : 'bg-stone-50 border-stone-200/80 text-stone-800 placeholder-stone-400 focus:border-teal-500/50'
+                  ? 'bg-slate-950 border-slate-800 text-slate-200 placeholder-slate-500 focus:border-indigo-500/40'
+                  : 'bg-stone-50 border-stone-200/80 text-stone-800 placeholder-stone-400 focus:border-teal-500/50'
                   }`}
               />
               <button
@@ -1230,8 +1238,8 @@ export default function AppLayout({ currentUser, onLogout }) {
                         type="button"
                         onClick={() => setReflectionMood(m)}
                         className={`py-1.5 rounded-xl border text-[10px] font-bold capitalize transition cursor-pointer ${reflectionMood === m
-                            ? isDarkMode ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm' : 'bg-teal-500 border-teal-400 text-white shadow-sm'
-                            : isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800' : 'bg-stone-50 border-stone-200 text-stone-500 hover:bg-stone-100'
+                          ? isDarkMode ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm' : 'bg-teal-500 border-teal-400 text-white shadow-sm'
+                          : isDarkMode ? 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800' : 'bg-stone-50 border-stone-200 text-stone-500 hover:bg-stone-100'
                           }`}
                       >
                         {m}
@@ -1249,8 +1257,8 @@ export default function AppLayout({ currentUser, onLogout }) {
                     placeholder="e.g., implemented self-attention matrices, resolved layout render loop leaks."
                     rows={3}
                     className={`border rounded-2xl p-3 text-xs focus:outline-none resize-none transition ${isDarkMode
-                        ? 'bg-slate-950 border-slate-800 text-slate-200 placeholder-slate-600 focus:border-indigo-500/40'
-                        : 'bg-stone-50 border-stone-200/80 text-stone-800 placeholder-stone-400 focus:border-teal-500/50'
+                      ? 'bg-slate-950 border-slate-800 text-slate-200 placeholder-slate-600 focus:border-indigo-500/40'
+                      : 'bg-stone-50 border-stone-200/80 text-stone-800 placeholder-stone-400 focus:border-teal-500/50'
                       }`}
                   />
                 </div>
