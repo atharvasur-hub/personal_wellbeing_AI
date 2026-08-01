@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { sendOllamaChatRequest } from '../../api/chat';
+import { sendOllamaChatRequest } from './ollamaClient';
 
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;

@@ -3,7 +3,7 @@
  * Grounded on local Ollama provider ('http://localhost:11434/v1' with model 'llama3')
  */
 
-import { evaluateContentWithOllama, extractAutonomousDataWithOllama } from '../../api/chat';
+import { evaluateContentWithOllama, extractAutonomousDataWithOllama } from './ollamaClient';
 
 /**
  * Perform autonomous data extraction on raw text or scraped content

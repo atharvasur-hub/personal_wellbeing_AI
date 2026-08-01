@@ -41,7 +41,7 @@ const AGENT_PERSONAS = {
   }
 };
 
-import { sendOllamaChatRequest } from '../../api/chat';
+import { sendOllamaChatRequest } from '../lib/ollamaClient';
 
 // CUSTOM LIVE / OLLAMA AGENTIC CHAT HOOK
 function useMockChat(activeAgent) {
