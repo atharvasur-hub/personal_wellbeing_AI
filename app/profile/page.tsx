@@ -351,7 +351,7 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
         </div>
 
         {/* 5. Aspiration Decay & Pivot Alert */}
-        <AspirationPivotAlert isDarkMode={isDarkMode} onPivotAccept={handlePivotAccept} />
+        <AspirationPivotAlert isDarkMode={isDarkMode} currentUser={currentUser} onPivotAccept={handlePivotAccept} />
 
         {/* Notification Toast if Pivot Accepted */}
         {pivotNotice && (
@@ -447,7 +447,30 @@ export default function ProfileVpmDashboard({ isDarkMode = false, currentUser }:
                       isDarkMode ? 'text-white' : 'text-stone-900'
                     }`}>{node.name}</h4>
                   </div>
-                  <span className="text-xs font-mono font-bold text-indigo-600">{node.level}</span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-xs font-mono font-bold text-indigo-600">{node.level}</span>
+                    <button
+                      onClick={() => {
+                        const key = currentUser?.id ? `synapse_user_${currentUser.id}_skipped_accepted_task` : 'synapse_skipped_accepted_task';
+                        const data = {
+                          skippedTopic: node.name,
+                          engagedTopic: 'Product Management',
+                          duration: '2 weeks'
+                        };
+                        localStorage.setItem(key, JSON.stringify(data));
+                        localStorage.setItem('synapse_skipped_accepted_task', JSON.stringify(data));
+                        window.dispatchEvent(new Event('synapse_skipped_task_updated'));
+                      }}
+                      className={`text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border transition cursor-pointer ${
+                        isDarkMode 
+                          ? 'border-slate-700 bg-slate-900 text-slate-400 hover:text-rose-400 hover:border-rose-500/40' 
+                          : 'border-stone-200 bg-stone-100 text-stone-500 hover:text-rose-600 hover:border-rose-300'
+                      }`}
+                      title="Skip accepted task to test pivot alert"
+                    >
+                      Skip Task
+                    </button>
+                  </div>
                 </div>
                 <div className={`w-full h-2 rounded-full overflow-hidden border ${
                   isDarkMode ? 'bg-slate-900 border-slate-800' : 'bg-stone-200 border-stone-300/40'
