@@ -90,3 +90,8 @@ export async function checkHabitSteering(activity, durationMinutes, userId = nul
 export async function analyzeIntentWithBackend(goal, mood = 'focused') {
   return apiFetch('/api/analyze-intent', { goal, mood });
 }
+
+export async function analyzeGoalWithAI(goal, userName = 'User') {
+  return apiFetch('/api/analyze-intent', { goal, user_name: userName });
+}
+

@@ -61,6 +61,22 @@ export default function AppLayout({ currentUser, onLogout }) {
     return !localStorage.getItem('synapse_onboarding_completed');
   });
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [backendOnline, setBackendOnline] = useState(false);
+
+  // Check backend health periodically
+  useEffect(() => {
+    let mounted = true;
+    async function checkHealth() {
+      const isOnline = await checkBackendHealth();
+      if (mounted) setBackendOnline(isOnline);
+    }
+    checkHealth();
+    const interval = setInterval(checkHealth, 10000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Dynamic user data from Auth
   const userName = currentUser?.name || 'Atharva Sur';
