@@ -23,7 +23,8 @@ export async function fetchAIRecommendations(goalText, userId = null) {
       url: item.url,
       duration: item.duration,
       reason: item.reason,
-      signalScore: item.signal_score || 95
+      signalScore: item.signal_score || 95,
+      isGapFix: item.is_gap_fix || false
     }));
   }
 

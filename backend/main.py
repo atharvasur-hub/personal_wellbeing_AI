@@ -84,7 +84,7 @@ if SUPABASE_URL and SUPABASE_KEY and "your-supabase" not in SUPABASE_URL:
         supabase_client = None
 
 # ── Local In-Memory Fallback Database ──────────────────────────
-in_memory_db: Dict[str, List[Dict[str, Any]]] = {
+in_memory_db: Dict[str, Any] = {
     "chat_messages": [],
     "user_aspirations": [],
     "habit_steering_logs": [],
@@ -100,8 +100,28 @@ in_memory_db: Dict[str, List[Dict[str, Any]]] = {
         }
     ],
     "user_profiles": {},
-    "user_deep_skills": {}
+    "user_deep_skills": {},
+    "failed_concepts": {}
 }
+
+def _get_failed_concepts(user_id: str) -> List[str]:
+    if "failed_concepts" not in in_memory_db:
+        in_memory_db["failed_concepts"] = {}
+    return in_memory_db["failed_concepts"].setdefault(user_id, [])
+
+def _add_failed_concept(user_id: str, concept: str):
+    concepts = _get_failed_concepts(user_id)
+    if concept not in concepts:
+        concepts.append(concept)
+
+def _remove_failed_concept(user_id: str, concept: str):
+    concepts = _get_failed_concepts(user_id)
+    if concept in concepts:
+        try:
+            concepts.remove(concept)
+        except ValueError:
+            pass
+
 
 
 # ── FastAPI App Configuration ────────────────────────────────
@@ -146,6 +166,8 @@ class ContentItem(BaseModel):
     duration: str
     reason: str
     signal_score: int
+    is_gap_fix: Optional[bool] = False
+
 
 class RecommendationResponse(BaseModel):
     goal: str
@@ -325,21 +347,30 @@ def _record_chat_message(user_id: str, role: str, text: str, suggestions: List[s
 async def recommend(req: GoalRequest):
     """ML Content Curation — returns 4 items (Video, Short, Reel, Article) for a goal."""
     intent = _analyze_intent(req.goal)
+    user_id = req.user_id or "usr_default"
+    failed_concepts = _get_failed_concepts(user_id)
 
     try:
-        items = await _gemini_recommendations(req.goal)
+        items = await _gemini_recommendations(req.goal, failed_concepts)
         if items:
             return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
-    except Exception:
+    except Exception as e:
+        print(f"[FastAPI] Gemini recommendations error: {e}")
         pass
 
-    items = _static_recommendations(req.goal)
+    items = _static_recommendations(req.goal, failed_concepts)
     return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
 
 
-async def _gemini_recommendations(goal: str) -> List[ContentItem]:
+async def _gemini_recommendations(goal: str, failed_concepts: List[str] = []) -> List[ContentItem]:
+    gap_instruction = ""
+    if failed_concepts:
+        concepts_str = ", ".join(failed_concepts)
+        gap_instruction = f'\nYou are an adaptive learning curator. The user recently struggled with the following concepts: {concepts_str}. You MUST prioritize and generate content cards specifically targeting these exact blind spots before recommending any general content. Tag the returned JSON object with `is_gap_fix: true`.'
+
     prompt = f"""
 You are an expert learning curator AI. A user has stated this goal: "{goal}"
+{gap_instruction}
 
 Return ONLY a valid JSON array with exactly 4 objects. No markdown, no extra text. Each object:
 - "type": one of "video", "short", "reel", "article"
@@ -349,6 +380,7 @@ Return ONLY a valid JSON array with exactly 4 objects. No markdown, no extra tex
 - "duration": e.g. "12 min" or "60 sec" or "8 min read"
 - "reason": one sentence starting with "Why: " explaining relevance to the goal
 - "signal_score": integer 90-99
+- "is_gap_fix": boolean (true if this card specifically targets the failed concepts/blind spots, false otherwise)
 
 Rules:
 1. Item 1 = type "video" (5-20 min full YouTube tutorial)
@@ -373,33 +405,147 @@ Return ONLY the JSON array.
             url=item.get("url", ""),
             duration=item.get("duration", ""),
             reason=item.get("reason", ""),
-            signal_score=item.get("signal_score", 95)
+            signal_score=item.get("signal_score", 95),
+            is_gap_fix=item.get("is_gap_fix", False)
         )
         for item in parsed[:4]
     ]
 
 
-def _static_recommendations(goal: str) -> List[ContentItem]:
+def _static_recommendations(goal: str, failed_concepts: List[str] = []) -> List[ContentItem]:
+    is_gap = len(failed_concepts) > 0
+    concepts_str = f" [{', '.join(failed_concepts)}]" if is_gap else ""
     g = goal.lower()
+    
     if any(k in g for k in ["react", "hooks", "frontend", "javascript"]):
         return [
-            ContentItem(type="video",   title="React useEffect Full Deep Dive",            youtube_id="SqcY0GlETPk", url="https://www.youtube.com/watch?v=SqcY0GlETPk", duration="14 min",      reason="Why: Covers every edge-case of useEffect memory leaks directly aligned with your goal.", signal_score=98),
-            ContentItem(type="short",   title="useState vs useReducer in 60 Seconds",       youtube_id="bFRDIBR9zM8", url="https://www.youtube.com/shorts/bFRDIBR9zM8", duration="60 sec",      reason="Why: 60-second micro-refresher on the most commonly confused React hooks.",             signal_score=96),
-            ContentItem(type="reel",    title="React Reconciler Algorithm Visualised",       youtube_id="TNhaISOUy6Q", url="https://www.youtube.com/watch?v=TNhaISOUy6Q", duration="45 sec",      reason="Why: High-retention animation of React diffing — low cognitive load.",                  signal_score=95),
-            ContentItem(type="article", title="A Complete Guide to useEffect – Overreacted", youtube_id="",           url="https://overreacted.io/a-complete-guide-to-useeffect/", duration="8 min read",  reason="Why: The gold standard deep-dive article — foundational mental model.",                 signal_score=94),
+            ContentItem(
+                type="video",
+                title=f"React useEffect Deep Dive{concepts_str}",
+                youtube_id="SqcY0GlETPk",
+                url="https://www.youtube.com/watch?v=SqcY0GlETPk",
+                duration="14 min",
+                reason=f"Why: Targeted review for your struggle with {', '.join(failed_concepts)}." if is_gap else "Why: Covers every edge-case of useEffect memory leaks directly aligned with your goal.",
+                signal_score=98,
+                is_gap_fix=is_gap
+            ),
+            ContentItem(
+                type="short",
+                title="useState vs useReducer in 60 Seconds",
+                youtube_id="bFRDIBR9zM8",
+                url="https://www.youtube.com/shorts/bFRDIBR9zM8",
+                duration="60 sec",
+                reason="Why: 60-second micro-refresher on the most commonly confused React hooks.",
+                signal_score=96,
+                is_gap_fix=False
+            ),
+            ContentItem(
+                type="reel",
+                title="React Reconciler Algorithm Visualised",
+                youtube_id="TNhaISOUy6Q",
+                url="https://www.youtube.com/watch?v=TNhaISOUy6Q",
+                duration="45 sec",
+                reason="Why: High-retention animation of React diffing — low cognitive load.",
+                signal_score=95,
+                is_gap_fix=False
+            ),
+            ContentItem(
+                type="article",
+                title=f"React State Management & Hooks Guide",
+                youtube_id="",
+                url="https://overreacted.io/a-complete-guide-to-useeffect/",
+                duration="8 min read",
+                reason=f"Why: Hand-picked to address your knowledge gap in {', '.join(failed_concepts)}." if is_gap else "Why: The gold standard deep-dive article — foundational mental model.",
+                signal_score=94,
+                is_gap_fix=is_gap
+            ),
         ]
+        
     if any(k in g for k in ["machine learning", "ml", "neural", "python", "ai", "deep learning"]):
         return [
-            ContentItem(type="video",   title="Neural Networks from Scratch – Karpathy",  youtube_id="VMj-3S1tku0", url="https://www.youtube.com/watch?v=VMj-3S1tku0", duration="25 min",      reason="Why: World-class backpropagation walkthrough from Andrej Karpathy — ideal for your ML goal.", signal_score=98),
-            ContentItem(type="short",   title="Gradient Descent in 60 Seconds",            youtube_id="IHZwWFHWa-w", url="https://www.youtube.com/shorts/IHZwWFHWa-w", duration="60 sec",      reason="Why: Instant gradient descent mental model — quick review before deeper practice.",          signal_score=96),
-            ContentItem(type="reel",    title="How a Neural Network Learns (Animated)",     youtube_id="aircAruvnKk", url="https://www.youtube.com/watch?v=aircAruvnKk", duration="45 sec",      reason="Why: Stunning visual of neural net weight updates — excellent visual recall.",               signal_score=95),
-            ContentItem(type="article", title="The Illustrated Transformer – Jay Alammar",  youtube_id="",           url="https://jalammar.github.io/illustrated-transformer/", duration="12 min read", reason="Why: The best single article for understanding attention mechanisms.",                       signal_score=94),
+            ContentItem(
+                type="video",
+                title=f"Neural Networks from Scratch{concepts_str} – Karpathy",
+                youtube_id="VMj-3S1tku0",
+                url="https://www.youtube.com/watch?v=VMj-3S1tku0",
+                duration="25 min",
+                reason=f"Why: World-class backpropagation walkthrough targeted for your struggle with {', '.join(failed_concepts)}." if is_gap else "Why: World-class backpropagation walkthrough from Andrej Karpathy — ideal for your ML goal.",
+                signal_score=98,
+                is_gap_fix=is_gap
+            ),
+            ContentItem(
+                type="short",
+                title="Gradient Descent in 60 Seconds",
+                youtube_id="IHZwWFHWa-w",
+                url="https://www.youtube.com/shorts/IHZwWFHWa-w",
+                duration="60 sec",
+                reason="Why: Instant gradient descent mental model — quick review before deeper practice.",
+                signal_score=96,
+                is_gap_fix=False
+            ),
+            ContentItem(
+                type="reel",
+                title="How a Neural Network Learns (Animated)",
+                youtube_id="aircAruvnKk",
+                url="https://www.youtube.com/watch?v=aircAruvnKk",
+                duration="45 sec",
+                reason="Why: Stunning visual of neural net weight updates — excellent visual recall.",
+                signal_score=95,
+                is_gap_fix=False
+            ),
+            ContentItem(
+                type="article",
+                title=f"Attention mechanisms & Transformers Guide",
+                youtube_id="",
+                url="https://jalammar.github.io/illustrated-transformer/",
+                duration="12 min read",
+                reason=f"Why: The best single article for understanding attention mechanisms, targeting {', '.join(failed_concepts)}." if is_gap else "Why: The best single article for understanding attention mechanisms.",
+                signal_score=94,
+                is_gap_fix=is_gap
+            ),
         ]
+        
     return [
-        ContentItem(type="video",   title="Deep Work – Achieve Peak Performance",   youtube_id="gTaJhjQHcf8", url="https://www.youtube.com/watch?v=gTaJhjQHcf8", duration="14 min",     reason="Why: Cal Newport deep work framework — directly boosts ability to reach your goal.",      signal_score=98),
-        ContentItem(type="short",   title="The 5-Second Rule in 60 Seconds",        youtube_id="k2TaFVANNTg", url="https://www.youtube.com/shorts/k2TaFVANNTg",  duration="60 sec",     reason="Why: Instant motivation trigger — activates momentum toward your goal.",                  signal_score=96),
-        ContentItem(type="reel",    title="Flow State Activation – Get Deep Focus",  youtube_id="QkOCbt_o2HY", url="https://www.youtube.com/watch?v=QkOCbt_o2HY", duration="45 sec",     reason="Why: Primes your brain for high-yield learning sessions.",                               signal_score=95),
-        ContentItem(type="article", title="The Feynman Technique – Learn Anything",  youtube_id="",           url="https://fs.blog/feynman-technique/", duration="6 min read", reason="Why: The best learning strategy — explains through teaching to lock in understanding.",  signal_score=94),
+        ContentItem(
+            type="video",
+            title=f"Deep Work – Achieve Peak Performance{concepts_str}",
+            youtube_id="gTaJhjQHcf8",
+            url="https://www.youtube.com/watch?v=gTaJhjQHcf8",
+            duration="14 min",
+            reason=f"Why: Cal Newport deep work framework targeted for your struggle with {', '.join(failed_concepts)}." if is_gap else "Why: Cal Newport deep work framework — directly boosts ability to reach your goal.",
+            signal_score=98,
+            is_gap_fix=is_gap
+        ),
+        ContentItem(
+            type="short",
+            title="The 5-Second Rule in 60 Seconds",
+            youtube_id="k2TaFVANNTg",
+            url="https://www.youtube.com/shorts/k2TaFVANNTg",
+            duration="60 sec",
+            reason="Why: Instant motivation trigger — activates momentum toward your goal.",
+            signal_score=96,
+            is_gap_fix=False
+        ),
+        ContentItem(
+            type="reel",
+            title="Flow State Activation – Get Deep Focus",
+            youtube_id="QkOCbt_o2HY",
+            url="https://www.youtube.com/watch?v=QkOCbt_o2HY",
+            duration="45 sec",
+            reason="Why: Primes your brain for high-yield learning sessions.",
+            signal_score=95,
+            is_gap_fix=False
+        ),
+        ContentItem(
+            type="article",
+            title="The Feynman Technique – Learn Anything",
+            youtube_id="",
+            url="https://fs.blog/feynman-technique/",
+            duration="6 min read",
+            reason=f"Why: Explains through teaching to lock in understanding, targeting your struggle with {', '.join(failed_concepts)}." if is_gap else "Why: The best learning strategy — explains through teaching to lock in understanding.",
+            signal_score=94,
+            is_gap_fix=is_gap
+        ),
     ]
 
 
@@ -925,6 +1071,11 @@ async def deep_skill_submit_answer(req: DeepSkillQuizSubmitRequest):
 
     # Update proficiency score for target skill
     skill = req.skill
+    if not is_correct:
+        _add_failed_concept(user_id, skill)
+    else:
+        _remove_failed_concept(user_id, skill)
+
     current_score = state["proficiency_scores"].get(skill, 65)
     score_gain = 4 if is_correct else 1
     new_score = min(100, current_score + score_gain)

@@ -529,7 +529,7 @@ export default function AppLayout({ currentUser, onLogout }) {
                 <AgenticOnboardingFlow isDarkMode={isDarkMode} />
 
                 {/* PROMINENT AI CURATED FEED SECTION */}
-                <CuratedFeed isDarkMode={isDarkMode} />
+                <CuratedFeed isDarkMode={isDarkMode} currentUser={currentUser} />
 
                 {/* Dashboard Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

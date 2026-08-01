@@ -184,12 +184,16 @@ export async function askDeepSkillQA(skill, question, history = [], userId = 'us
 }
 
 export async function submitDeepSkillQuizAnswer(skill, question, selectedOption, correctOption, userId = 'usr_default') {
-  return apiFetch('/api/deep-skill/submit-answer', {
+  const result = await apiFetch('/api/deep-skill/submit-answer', {
     user_id: userId,
     skill,
     question,
     selected_option: selectedOption,
     correct_option: correctOption
   });
+  if (result) {
+    window.dispatchEvent(new CustomEvent('quizSubmitted'));
+  }
+  return result;
 }
 
