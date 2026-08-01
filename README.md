@@ -16,15 +16,7 @@ The project consists of multiple interconnected services:
 - **Tech Stack**: Python, FastAPI, Google Generative AI, Uvicorn
 - **Description**: The intelligence layer. It hosts API endpoints for managing ML models, data curation, habit steering algorithms, and interacts seamlessly with the Supabase database.
 
-### 3. Browser Extension / Digital Guardian (`/extension`)
-- **Tech Stack**: Vanilla JavaScript (Manifest V3)
-- **Description**: Your digital guardian. It runs in the background of your browser to track web usage, detect doomscrolling, and intercept or block distractor sites when a Focus Sprint is active.
-
-### 4. Calendar Utility (`/calendar-utility`)
-- **Tech Stack**: Node.js, TypeScript
-- **Description**: A service for automating schedule syncing with external calendar providers (e.g. Google Calendar, Outlook) to effortlessly schedule your deep work sessions.
-
-### 5. Database & Auth (Supabase)
+### 3. Database & Auth (Supabase)
 - **Tech Stack**: Supabase (PostgreSQL)
 - **Description**: The single source of truth handling user authentication, tracking metrics, and persisting focus sessions across all platforms. (See `supabase_schema.sql` for the schema structure).
 
@@ -63,6 +55,7 @@ The project consists of multiple interconnected services:
 
 ## 🧠 Core Concepts
 
-- **Focus Sprints:** Uninterrupted blocks of work enforced by the Digital Guardian extension.
+- **Focus Sprints:** Uninterrupted blocks of work.
 - **Identity Graph:** AI-curated feeds matching your skills and career aspirations instead of mind-numbing social media.
 - **Journey Map:** A trajectory of your growth, visually transitioning you from baseline metrics to peak mastery (10/10 focus autonomy).
+- **Community Hub & Leaderboard:** Connect with others on the same journey, share progress, and compete to achieve your wellbeing goals.
