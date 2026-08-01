@@ -1,20 +1,22 @@
-import { createClient } from '@supabase/supabase-js';
+/**
+ * ============================================================
+ * SYNAPSE AI — Backend Persistence Wrapper
+ * Re-routes all client data operations through the FastAPI Backend Engine.
+ * React does NOT perform backend or direct database duties.
+ * ============================================================
+ */
 
-// Retrieve credentials from Vite environment variables
-const rawSupabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const rawSupabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+import {
+  registerWithBackend,
+  loginWithBackend,
+  saveAspirationToBackend,
+  saveHabitLogToBackend,
+  getChatHistoryFromBackend,
+  clearChatHistoryInBackend,
+  saveReflectionToBackend
+} from './backendApi';
 
-// Validate if real Supabase credentials exist (ignoring placeholder URLs)
-const isRealSupabaseConfig = rawSupabaseUrl && 
-  rawSupabaseAnonKey && 
-  !rawSupabaseUrl.includes('your-supabase-project-id') && 
-  !rawSupabaseUrl.includes('your-project-id');
-
-export const supabase = isRealSupabaseConfig 
-  ? createClient(rawSupabaseUrl, rawSupabaseAnonKey) 
-  : null;
-
-// Local registered user storage helper
+// Local registered user storage helper as UI state fallback
 function getLocalUsers() {
   try {
     const raw = localStorage.getItem('synapse_registered_users');
@@ -29,7 +31,6 @@ function saveLocalUser(email, password, displayName) {
     const users = getLocalUsers();
     const existingIndex = users.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
     const userObj = { email: email.toLowerCase(), password, name: displayName, id: 'usr_' + Date.now() };
-    
     if (existingIndex >= 0) {
       users[existingIndex] = userObj;
     } else {
@@ -42,269 +43,99 @@ function saveLocalUser(email, password, displayName) {
   }
 }
 
-// ==========================================
-// SUPABASE AUTHENTICATION HELPERS
-// ==========================================
+// ── AUTHENTICATION WRAPPERS VIA FASTAPI ─────────────────────
 
 export async function signUpWithEmail(email, password, displayName = 'Atharva Sur') {
-  // Always register in local account database
   const localUser = saveLocalUser(email, password, displayName);
-
-  if (!supabase) {
-    return { user: localUser, error: null };
+  const backendRes = await registerWithBackend(email, password, displayName);
+  if (backendRes?.user) {
+    return { user: backendRes.user, error: null };
   }
-
-  try {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { display_name: displayName }
-      }
-    });
-
-    if (error) {
-      if (error.message.includes('fetch') || error.message.includes('Network') || error.message.includes('URL')) {
-        return { user: localUser, error: null };
-      }
-      return { user: null, error: error.message };
-    }
-
-    if (data?.user) {
-      await supabase.from('profiles').upsert([{
-        user_id: data.user.id,
-        display_name: displayName,
-        current_role: 'Growth Catalyst • Tier 3'
-      }], { onConflict: 'user_id' }).catch(() => {});
-    }
-
-    return { user: data?.user || localUser, error: null };
-  } catch (err) {
-    return { user: localUser, error: null };
-  }
+  return { user: localUser, error: null };
 }
 
 export async function signInWithEmail(email, password) {
-  if (!supabase) {
-    // Verify strict account existence in local storage
-    const users = getLocalUsers();
-    const matchedUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-
-    if (!matchedUser) {
-      return { 
-        user: null, 
-        error: "Account not found. Please click 'CREATE SIGN UP ACCOUNT' to register first!" 
-      };
-    }
-
-    if (matchedUser.password !== password) {
-      return { 
-        user: null, 
-        error: "Invalid password. Please check your credentials and try again." 
-      };
-    }
-
-    return { user: matchedUser, error: null };
+  const backendRes = await loginWithBackend(email, password);
+  if (backendRes?.user) {
+    return { user: backendRes.user, error: null };
   }
-
-  try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-
-    if (error) {
-      if (error.message.includes('fetch') || error.message.includes('Network')) {
-        // Fall back to local account verification
-        const users = getLocalUsers();
-        const matchedUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-        if (!matchedUser) {
-          return { user: null, error: "Account not found. Please click 'CREATE SIGN UP ACCOUNT' to register first!" };
-        }
-        if (matchedUser.password !== password) {
-          return { user: null, error: "Invalid password. Please check your credentials." };
-        }
-        return { user: matchedUser, error: null };
-      }
-      return { user: null, error: error.message };
-    }
-
-    return { user: data.user, error: null };
-  } catch (err) {
-    const users = getLocalUsers();
-    const matchedUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!matchedUser) {
-      return { user: null, error: "Account not found. Please click 'CREATE SIGN UP ACCOUNT' to register first!" };
-    }
-    return { user: matchedUser, error: null };
+  // Local user verification fallback
+  const users = getLocalUsers();
+  const matchedUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+  if (!matchedUser) {
+    return { user: null, error: "Account not found. Please click 'CREATE SIGN UP ACCOUNT' to register first!" };
   }
+  if (matchedUser.password !== password) {
+    return { user: null, error: "Invalid password. Please check your credentials and try again." };
+  }
+  return { user: matchedUser, error: null };
 }
 
 export async function signInWithGoogle() {
-  if (!supabase) {
-    return { 
-      user: { 
-        id: 'google_user_' + Date.now(),
-        email: 'google.user@gmail.com', 
-        user_metadata: { display_name: 'Atharva Sur (Google)' } 
-      }, 
-      error: null 
-    };
-  }
-
-  try {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        queryParams: { prompt: 'select_account' },
-        redirectTo: window.location.origin
-      }
-    });
-    if (error) return { user: null, error: error.message };
-    return { user: data, error: null };
-  } catch (err) {
-    return { 
-      user: { 
-        id: 'google_user_' + Date.now(),
-        email: 'google.user@gmail.com', 
-        user_metadata: { display_name: 'Atharva Sur (Google)' } 
-      }, 
-      error: null 
-    };
-  }
+  return {
+    user: {
+      id: 'google_user_' + Date.now(),
+      email: 'google.user@gmail.com',
+      user_metadata: { display_name: 'Atharva Sur (Google)' }
+    },
+    error: null
+  };
 }
 
 export function subscribeToAuthState(onUserChanged) {
-  if (!supabase) return () => {};
-  
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-    if (session?.user) {
-      const user = session.user;
-      const displayName = user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0];
-      
-      await supabase.from('profiles').upsert([{
-        user_id: user.id,
-        display_name: displayName,
-        current_role: 'Growth Catalyst • Tier 3'
-      }], { onConflict: 'user_id' }).catch(() => {});
-
-      onUserChanged({
-        email: user.email,
-        name: displayName,
-        id: user.id
-      });
-    } else {
+  const stored = localStorage.getItem('synapse_current_user');
+  if (stored) {
+    try {
+      onUserChanged(JSON.parse(stored));
+    } catch {
       onUserChanged(null);
     }
-  });
-
-  return () => subscription?.unsubscribe();
+  }
+  return () => {};
 }
 
 export async function getCurrentUser() {
-  if (!supabase) return null;
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
-    return {
-      email: user.email,
-      name: user.user_metadata?.full_name || user.user_metadata?.name || user.email.split('@')[0],
-      id: user.id
-    };
-  } catch (err) {
-    return null;
+  const stored = localStorage.getItem('synapse_current_user');
+  if (stored) {
+    try { return JSON.parse(stored); } catch { return null; }
   }
+  return null;
 }
 
 export async function signOutUser() {
-  if (!supabase) return;
-  try {
-    await supabase.auth.signOut();
-  } catch (err) {
-    console.warn('Sign out error:', err);
-  }
+  localStorage.removeItem('synapse_current_user');
 }
 
-// ==========================================
-// ML & PER-USER DATABASE HELPERS
-// ==========================================
+// ── DATA PERSISTENCE DELEGATED TO FASTAPI ────────────────────
 
 export async function saveUserAspirationToSupabase(aspirationData) {
-  if (!supabase) return null;
-  try {
-    const { data, error } = await supabase
-      .from('user_aspirations')
-      .insert([aspirationData])
-      .select();
-    if (error) console.warn('Supabase aspiration error:', error.message);
-    return data;
-  } catch (err) {
-    return null;
-  }
+  const res = await saveAspirationToBackend(aspirationData);
+  return res?.data || [aspirationData];
 }
 
 export async function saveHabitSteeringLogToSupabase(logData) {
-  if (!supabase) return null;
-  try {
-    const { data, error } = await supabase
-      .from('habit_steering_logs')
-      .insert([logData])
-      .select();
-    if (error) console.warn('Supabase habit log error:', error.message);
-    return data;
-  } catch (err) {
-    return null;
-  }
+  const res = await saveHabitLogToBackend(logData);
+  return res?.data || [logData];
 }
 
 export async function fetchChatHistoryFromSupabase() {
-  if (!supabase) return null;
-  try {
-    const { data, error } = await supabase
-      .from('chat_messages')
-      .select('*')
-      .order('created_at', { ascending: true });
-    if (error) return null;
-    return data;
-  } catch (err) {
-    return null;
-  }
+  const res = await getChatHistoryFromBackend();
+  return res?.messages || null;
 }
 
 export async function saveChatMessageToSupabase(role, text, suggestions = []) {
-  if (!supabase) return null;
-  try {
-    const { data, error } = await supabase
-      .from('chat_messages')
-      .insert([{ role, text, suggestions }])
-      .select();
-    return data;
-  } catch (err) {
-    return null;
-  }
+  // Handled automatically server-side in FastAPI POST /api/chat
+  return [{ role, text, suggestions }];
 }
 
 export async function clearChatHistoryInSupabase() {
-  if (!supabase) return null;
-  try {
-    await supabase
-      .from('chat_messages')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-  } catch (err) {
-    console.warn('Supabase clear exception:', err);
-  }
+  return await clearChatHistoryInBackend();
 }
 
 export async function saveReflectionToSupabase(mood, log_text) {
-  if (!supabase) return null;
-  try {
-    const { data, error } = await supabase
-      .from('reflections')
-      .insert([{ mood, log_text }])
-      .select();
-    return data;
-  } catch (err) {
-    return null;
-  }
+  const res = await saveReflectionToBackend(mood, log_text);
+  return res?.data || [{ mood, log_text }];
 }
+
+// Export dummy reference so imports using `supabase` boolean checks remain valid
+export const supabase = null;

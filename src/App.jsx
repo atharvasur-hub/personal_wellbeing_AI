@@ -3,45 +3,40 @@ import AuthPage from './components/AuthPage';
 import AppLayout from './components/AppLayout';
 import { getCurrentUser, signOutUser, subscribeToAuthState } from './lib/supabaseClient';
 
+const DEFAULT_USER = {
+  id: 'usr_default',
+  name: 'Atharva Sur',
+  email: 'atharva@synapse.ai'
+};
+
 function App() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('synapse_auth_user') || localStorage.getItem('synapse_current_user');
+      if (savedUser) return JSON.parse(savedUser);
+    } catch (e) {
+      console.warn('Invalid saved auth user format');
+    }
+    return DEFAULT_USER;
+  });
+  
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // 1. Check local session storage fallback for seamless dev experience
-    const savedUser = localStorage.getItem('synapse_auth_user');
-    if (savedUser) {
-      try {
-        setCurrentUser(JSON.parse(savedUser));
-      } catch (e) {
-        console.warn('Invalid saved auth user format');
-      }
-    }
-
-    // 2. Initial check for logged in Supabase user
     async function checkAuth() {
       const user = await getCurrentUser();
       if (user) {
         setCurrentUser(user);
         localStorage.setItem('synapse_auth_user', JSON.stringify(user));
       }
-      setLoading(false);
     }
     checkAuth();
 
-    // 3. Subscribe to real-time auth changes (Google OAuth redirect & session changes)
     const unsubscribe = subscribeToAuthState((userData) => {
       if (userData) {
         setCurrentUser(userData);
         localStorage.setItem('synapse_auth_user', JSON.stringify(userData));
-      } else {
-        // If logged out from Supabase
-        const currentSaved = localStorage.getItem('synapse_auth_user');
-        if (!currentSaved) {
-          setCurrentUser(null);
-        }
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -55,6 +50,7 @@ function App() {
   const handleLogout = async () => {
     await signOutUser();
     localStorage.removeItem('synapse_auth_user');
+    localStorage.removeItem('synapse_current_user');
     setCurrentUser(null);
   };
 

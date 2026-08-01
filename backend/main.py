@@ -1,14 +1,15 @@
 """
 =============================================================
- SYNAPSE AI — FastAPI Backend
- ML Model: Goal Analysis, Content Curation & Habit Steering
+ SYNAPSE AI — FastAPI Backend Engine
+ Sole Backend for ML Models, Data Curation, Habit Steering,
+ User Persistence & Auth Services
 =============================================================
 
 SETUP:
-  1. pip install fastapi uvicorn google-generativeai supabase python-dotenv
+  1. pip install fastapi uvicorn google-generativeai supabase python-dotenv pydantic
 
 RUN:
-  uvicorn main:app --reload --port 8000
+  cd backend && uvicorn main:app --reload --port 8000
 
 API DOCS:
   http://localhost:8000/docs
@@ -17,10 +18,11 @@ API DOCS:
 
 import os
 import json
-from typing import Optional
+import time
+from typing import Optional, List, Dict, Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import google.generativeai as genai
 
 # ── Load environment variables ────────────────────────────────
@@ -29,32 +31,56 @@ load_dotenv()
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 SUPABASE_URL   = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY   = os.getenv("SUPABASE_SERVICE_KEY", "")
+SUPABASE_KEY   = os.getenv("SUPABASE_SERVICE_KEY", "") or os.getenv("SUPABASE_ANON_KEY", "")
 
 # ── Configure Gemini ──────────────────────────────────────────
 if GEMINI_API_KEY and GEMINI_API_KEY != "YOUR_GEMINI_API_KEY_HERE":
-    genai.configure(api_key=GEMINI_API_KEY)
-    gemini_model = genai.GenerativeModel("gemini-2.0-flash")
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        gemini_model = genai.GenerativeModel("gemini-2.0-flash")
+    except Exception as e:
+        print(f"[FastAPI] Gemini init warning: {e}")
+        gemini_model = None
 else:
     gemini_model = None
 
-# ── Configure Supabase (optional persistence) ─────────────────
+# ── Configure Supabase (Server-Side Client) ───────────────────
 supabase_client = None
-if SUPABASE_URL and SUPABASE_KEY:
+if SUPABASE_URL and SUPABASE_KEY and "your-supabase" not in SUPABASE_URL:
     try:
         from supabase import create_client
         supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[FastAPI] Supabase init warning: {e}")
+        supabase_client = None
 
-# ── FastAPI App ───────────────────────────────────────────────
+# ── Local In-Memory Fallback Database ──────────────────────────
+in_memory_db: Dict[str, List[Dict[str, Any]]] = {
+    "chat_messages": [],
+    "user_aspirations": [],
+    "habit_steering_logs": [],
+    "focus_sessions": [],
+    "reflections": [],
+    "users": [
+        {
+            "id": "usr_default",
+            "email": "atharva@synapse.ai",
+            "password": "password123",
+            "name": "Atharva Sur",
+            "role": "Growth Catalyst • Tier 3"
+        }
+    ],
+    "user_profiles": {}
+}
+
+
+# ── FastAPI App Configuration ────────────────────────────────
 app = FastAPI(
-    title="Synapse AI — Personal Wellbeing ML Backend",
-    description="ML model API: Goal Analysis, Content Curation & Habit Steering",
-    version="1.0.0",
+    title="Synapse AI — Complete FastAPI Backend",
+    description="Unified backend providing AI Chat, ML Recommendations, Digital Guardian, Focus Tracking, and User State Management.",
+    version="2.0.0",
 )
 
-# ── CORS — allow the React dev server ────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
@@ -65,22 +91,22 @@ app.add_middleware(
 
 
 # ═══════════════════════════════════════════════════════════════
-# PYDANTIC REQUEST / RESPONSE MODELS
+# PYDANTIC SCHEMAS
 # ═══════════════════════════════════════════════════════════════
 
 class ChatRequest(BaseModel):
     message: str
-    history: list[dict] = []
-    user_id: Optional[str] = None
+    history: List[Dict[str, Any]] = []
+    user_id: Optional[str] = "usr_default"
 
 class ChatResponse(BaseModel):
     reply: str
-    suggestions: list[str] = []
+    suggestions: List[str] = []
 
 class GoalRequest(BaseModel):
     goal: str
     mood: Optional[str] = "focused"
-    user_id: Optional[str] = None
+    user_id: Optional[str] = "usr_default"
 
 class ContentItem(BaseModel):
     type: str          # "video" | "short" | "reel" | "article"
@@ -93,13 +119,13 @@ class ContentItem(BaseModel):
 
 class RecommendationResponse(BaseModel):
     goal: str
-    items: list[ContentItem]
+    items: List[ContentItem]
     intent_domain: str
 
 class HabitCheckRequest(BaseModel):
     activity: str
     duration_minutes: int
-    user_id: Optional[str] = None
+    user_id: Optional[str] = "usr_default"
 
 class HabitCheckResponse(BaseModel):
     intercept_required: bool
@@ -107,9 +133,57 @@ class HabitCheckResponse(BaseModel):
     redirect_suggestion: Optional[str] = None
     time_saved_minutes: Optional[int] = None
 
+class HabitLogRequest(BaseModel):
+    user_id: Optional[str] = "usr_default"
+    intercept_trigger: str
+    time_saved_minutes: int
+    redirected_sprint: str
+    user_accepted: bool = True
+
+class AspirationRequest(BaseModel):
+    user_id: Optional[str] = "usr_default"
+    aspiration: str
+    target_timeline: Optional[str] = "6 Months"
+    current_level: Optional[str] = "Intermediate"
+
+class FocusSessionRequest(BaseModel):
+    user_id: Optional[str] = "usr_default"
+    task_name: str
+    duration_minutes: int
+    distractions_blocked: int = 0
+    completed_at: Optional[str] = None
+
+class ReflectionRequest(BaseModel):
+    user_id: Optional[str] = "usr_default"
+    mood: str
+    log_text: str
+
+class AuthRegisterRequest(BaseModel):
+    email: str
+    password: str
+    display_name: Optional[str] = "Atharva Sur"
+
+class AuthLoginRequest(BaseModel):
+    email: str
+    password: str
+
+class UserProfileData(BaseModel):
+    user_id: Optional[str] = "usr_default"
+    name: Optional[str] = "Atharva Sur"
+    role: Optional[str] = "Growth Catalyst • Tier 3"
+    aspiration: Optional[str] = "Senior AI Architect"
+    email: Optional[str] = "atharva@synapse.ai"
+    streak: Optional[str] = "4-Day Focus Streak"
+    level: Optional[str] = "14"
+    xp: Optional[str] = "3,420"
+    focus_time: Optional[str] = "2h 15m"
+    skills_verified: Optional[str] = "12 Concepts"
+    goal_velocity: Optional[str] = "84%"
+    vpm_index: Optional[str] = "$4.82/min"
+
 
 # ═══════════════════════════════════════════════════════════════
-# PILLAR 1 — CHATBOT ENDPOINT
+# 1. CHATBOT & HISTORY ENDPOINTS
 # ═══════════════════════════════════════════════════════════════
 
 CHAT_SYSTEM_PROMPT = """
@@ -122,90 +196,103 @@ Always tie your advice directly to the user's stated goals and wellbeing.
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
-    """
-    Chatbot endpoint — powered by Gemini 2.0 Flash.
-    POST body: { "message": "...", "history": [...], "user_id": "..." }
-    """
+    """Chatbot endpoint — powered by Gemini 2.0 Flash."""
+    user_id = req.user_id or "usr_default"
+
     if not gemini_model:
-        return ChatResponse(
-            reply="Synapse AI is in offline mode. Add GEMINI_API_KEY to backend/.env to enable live AI responses.",
-            suggestions=["How do I set the API key?", "What can you do?"]
-        )
+        reply = "Synapse AI is operating in offline mode. Please add GEMINI_API_KEY to backend/.env to unlock live model responses."
+        suggestions = ["How do I set the API key?", "What can Synapse AI do?", "Start a 25-min focus sprint"]
+        _record_chat_message(user_id, "user", req.message)
+        _record_chat_message(user_id, "assistant", reply, suggestions)
+        return ChatResponse(reply=reply, suggestions=suggestions)
 
     try:
-        # Build conversation context (last 6 messages)
         context = "\n".join(
-            f"{'User' if m['role'] == 'user' else 'Synapse AI'}: {m.get('text') or m.get('content', '')}"
+            f"{'User' if m.get('role') == 'user' else 'Synapse AI'}: {m.get('text') or m.get('content', '')}"
             for m in req.history[-6:]
         )
         prompt = f"{CHAT_SYSTEM_PROMPT}\n\n"
         if context:
-            prompt += f"Conversation so far:\n{context}\n\n"
+            prompt += f"Conversation context:\n{context}\n\n"
         prompt += f"User: {req.message}\nSynapse AI:"
 
         response = gemini_model.generate_content(prompt)
         reply_text = response.text.strip()
+        suggestions = _build_suggestions(req.message)
 
-        # Save to Supabase if connected
-        if supabase_client and req.user_id:
-            try:
-                supabase_client.table("chat_messages").insert({
-                    "user_id": req.user_id,
-                    "role": "user",
-                    "text": req.message
-                }).execute()
-                supabase_client.table("chat_messages").insert({
-                    "user_id": req.user_id,
-                    "role": "assistant",
-                    "text": reply_text
-                }).execute()
-            except Exception:
-                pass
+        _record_chat_message(user_id, "user", req.message)
+        _record_chat_message(user_id, "assistant", reply_text, suggestions)
 
-        return ChatResponse(
-            reply=reply_text,
-            suggestions=_build_suggestions(req.message)
-        )
-
+        return ChatResponse(reply=reply_text, suggestions=suggestions)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Gemini API error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Gemini AI Exception: {str(e)}")
+
+
+@app.get("/api/chat/history")
+async def get_chat_history(user_id: Optional[str] = "usr_default"):
+    """Fetch stored chat history for a user."""
+    if supabase_client:
+        try:
+            res = supabase_client.table("chat_messages").select("*").eq("user_id", user_id).order("created_at").execute()
+            if res.data:
+                return {"messages": res.data}
+        except Exception:
+            pass
+
+    user_msgs = [m for m in in_memory_db["chat_messages"] if m.get("user_id") == user_id]
+    return {"messages": user_msgs}
+
+
+@app.delete("/api/chat/history")
+async def clear_chat_history(user_id: Optional[str] = "usr_default"):
+    """Clear chat conversation history."""
+    if supabase_client:
+        try:
+            supabase_client.table("chat_messages").delete().eq("user_id", user_id).execute()
+        except Exception:
+            pass
+
+    in_memory_db["chat_messages"] = [m for m in in_memory_db["chat_messages"] if m.get("user_id") != user_id]
+    return {"status": "success", "message": "Chat history cleared"}
+
+
+def _record_chat_message(user_id: str, role: str, text: str, suggestions: List[str] = []):
+    msg_obj = {
+        "user_id": user_id,
+        "role": role,
+        "text": text,
+        "suggestions": suggestions,
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+    in_memory_db["chat_messages"].append(msg_obj)
+    if supabase_client:
+        try:
+            supabase_client.table("chat_messages").insert(msg_obj).execute()
+        except Exception:
+            pass
 
 
 # ═══════════════════════════════════════════════════════════════
-# PILLAR 2 — GOAL-BASED CONTENT RECOMMENDATIONS
+# 2. GOAL-BASED ML RECOMMENDATIONS
 # ═══════════════════════════════════════════════════════════════
 
 @app.post("/api/recommend", response_model=RecommendationResponse)
 async def recommend(req: GoalRequest):
-    """
-    ML Content Curation — returns 4 items (Video, Short, Reel, Article)
-    tailored to the user's stated goal using Gemini AI.
-    POST body: { "goal": "...", "mood": "focused", "user_id": "..." }
-    """
+    """ML Content Curation — returns 4 items (Video, Short, Reel, Article) for a goal."""
     intent = _analyze_intent(req.goal)
 
-    # Try Gemini for dynamic recommendations
     if gemini_model:
         try:
             items = await _gemini_recommendations(req.goal)
-            return RecommendationResponse(
-                goal=req.goal,
-                items=items,
-                intent_domain=intent["domain"]
-            )
+            return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
         except Exception:
-            pass  # Fall through to static
+            pass
 
-    # Keyword-based static fallback
     items = _static_recommendations(req.goal)
-    return RecommendationResponse(
-        goal=req.goal,
-        items=items,
-        intent_domain=intent["domain"]
-    )
+    return RecommendationResponse(goal=req.goal, items=items, intent_domain=intent["domain"])
 
 
-async def _gemini_recommendations(goal: str) -> list[ContentItem]:
+async def _gemini_recommendations(goal: str) -> List[ContentItem]:
     prompt = f"""
 You are an expert learning curator AI. A user has stated this goal: "{goal}"
 
@@ -223,7 +310,7 @@ Rules:
 2. Item 2 = type "short" (YouTube Short, under 60 sec)
 3. Item 3 = type "reel" (short-form video reel, under 60 sec)
 4. Item 4 = type "article" (high-quality article, youtube_id must be "")
-All YouTube IDs must be real and relevant. Return ONLY the JSON array.
+Return ONLY the JSON array.
 """.strip()
 
     response = gemini_model.generate_content(prompt)
@@ -238,83 +325,61 @@ All YouTube IDs must be real and relevant. Return ONLY the JSON array.
             url=item.get("url", ""),
             duration=item.get("duration", ""),
             reason=item.get("reason", ""),
-            signal_score=item.get("signal_score", 94)
+            signal_score=item.get("signal_score", 95)
         )
         for item in parsed[:4]
     ]
 
 
-def _static_recommendations(goal: str) -> list[ContentItem]:
-    """Keyword-based curated fallback recommendations."""
+def _static_recommendations(goal: str) -> List[ContentItem]:
     g = goal.lower()
-
     if any(k in g for k in ["react", "hooks", "frontend", "javascript"]):
         return [
-            ContentItem(type="video",   title="React useEffect Full Deep Dive",            youtube_id="SqcY0GlETPk", url="https://www.youtube.com/watch?v=SqcY0GlETPk",                    duration="14 min",      reason="Why: Covers every edge-case of useEffect memory leaks directly aligned with your goal.", signal_score=98),
-            ContentItem(type="short",   title="useState vs useReducer in 60 Seconds",       youtube_id="bFRDIBR9zM8", url="https://www.youtube.com/shorts/bFRDIBR9zM8",                    duration="60 sec",      reason="Why: 60-second micro-refresher on the most commonly confused React hooks.",             signal_score=96),
-            ContentItem(type="reel",    title="React Reconciler Algorithm Visualised",       youtube_id="TNhaISOUy6Q", url="https://www.youtube.com/watch?v=TNhaISOUy6Q",                   duration="45 sec",      reason="Why: High-retention animation of React diffing — low cognitive load.",                  signal_score=95),
-            ContentItem(type="article", title="A Complete Guide to useEffect – Overreacted", youtube_id="",           url="https://overreacted.io/a-complete-guide-to-useeffect/",         duration="8 min read",  reason="Why: The gold standard deep-dive article — foundational mental model.",                 signal_score=94),
+            ContentItem(type="video",   title="React useEffect Full Deep Dive",            youtube_id="SqcY0GlETPk", url="https://www.youtube.com/watch?v=SqcY0GlETPk", duration="14 min",      reason="Why: Covers every edge-case of useEffect memory leaks directly aligned with your goal.", signal_score=98),
+            ContentItem(type="short",   title="useState vs useReducer in 60 Seconds",       youtube_id="bFRDIBR9zM8", url="https://www.youtube.com/shorts/bFRDIBR9zM8", duration="60 sec",      reason="Why: 60-second micro-refresher on the most commonly confused React hooks.",             signal_score=96),
+            ContentItem(type="reel",    title="React Reconciler Algorithm Visualised",       youtube_id="TNhaISOUy6Q", url="https://www.youtube.com/watch?v=TNhaISOUy6Q", duration="45 sec",      reason="Why: High-retention animation of React diffing — low cognitive load.",                  signal_score=95),
+            ContentItem(type="article", title="A Complete Guide to useEffect – Overreacted", youtube_id="",           url="https://overreacted.io/a-complete-guide-to-useeffect/", duration="8 min read",  reason="Why: The gold standard deep-dive article — foundational mental model.",                 signal_score=94),
         ]
-
     if any(k in g for k in ["machine learning", "ml", "neural", "python", "ai", "deep learning"]):
         return [
-            ContentItem(type="video",   title="Neural Networks from Scratch – Karpathy",  youtube_id="VMj-3S1tku0", url="https://www.youtube.com/watch?v=VMj-3S1tku0",                    duration="25 min",      reason="Why: World-class backpropagation walkthrough from Andrej Karpathy — ideal for your ML goal.", signal_score=98),
-            ContentItem(type="short",   title="Gradient Descent in 60 Seconds",            youtube_id="IHZwWFHWa-w", url="https://www.youtube.com/shorts/IHZwWFHWa-w",                    duration="60 sec",      reason="Why: Instant gradient descent mental model — quick review before deeper practice.",          signal_score=96),
-            ContentItem(type="reel",    title="How a Neural Network Learns (Animated)",     youtube_id="aircAruvnKk", url="https://www.youtube.com/watch?v=aircAruvnKk",                   duration="45 sec",      reason="Why: Stunning visual of neural net weight updates — excellent visual recall.",               signal_score=95),
-            ContentItem(type="article", title="The Illustrated Transformer – Jay Alammar",  youtube_id="",           url="https://jalammar.github.io/illustrated-transformer/",            duration="12 min read", reason="Why: The best single article for understanding attention mechanisms.",                       signal_score=94),
+            ContentItem(type="video",   title="Neural Networks from Scratch – Karpathy",  youtube_id="VMj-3S1tku0", url="https://www.youtube.com/watch?v=VMj-3S1tku0", duration="25 min",      reason="Why: World-class backpropagation walkthrough from Andrej Karpathy — ideal for your ML goal.", signal_score=98),
+            ContentItem(type="short",   title="Gradient Descent in 60 Seconds",            youtube_id="IHZwWFHWa-w", url="https://www.youtube.com/shorts/IHZwWFHWa-w", duration="60 sec",      reason="Why: Instant gradient descent mental model — quick review before deeper practice.",          signal_score=96),
+            ContentItem(type="reel",    title="How a Neural Network Learns (Animated)",     youtube_id="aircAruvnKk", url="https://www.youtube.com/watch?v=aircAruvnKk", duration="45 sec",      reason="Why: Stunning visual of neural net weight updates — excellent visual recall.",               signal_score=95),
+            ContentItem(type="article", title="The Illustrated Transformer – Jay Alammar",  youtube_id="",           url="https://jalammar.github.io/illustrated-transformer/", duration="12 min read", reason="Why: The best single article for understanding attention mechanisms.",                       signal_score=94),
         ]
-
-    if any(k in g for k in ["system design", "backend", "microservice", "distributed", "architecture"]):
-        return [
-            ContentItem(type="video",   title="System Design Interview Step By Step",        youtube_id="i7twT3x5yv8", url="https://www.youtube.com/watch?v=i7twT3x5yv8",                   duration="20 min",      reason="Why: Structured walkthrough of scalable architecture decisions.",  signal_score=98),
-            ContentItem(type="short",   title="CAP Theorem in 60 Seconds",                   youtube_id="p4BpE5Ur4H0", url="https://www.youtube.com/shorts/p4BpE5Ur4H0",                    duration="60 sec",      reason="Why: Instant recall of CAP theorem — core to distributed design.", signal_score=96),
-            ContentItem(type="reel",    title="Load Balancer Explained (Animated)",           youtube_id="K0Ta65OqQkY", url="https://www.youtube.com/watch?v=K0Ta65OqQkY",                   duration="45 sec",      reason="Why: Fast animated visual of load balancing strategies.",         signal_score=95),
-            ContentItem(type="article", title="Designing Data-Intensive Applications Summary", youtube_id="",           url="https://martin.kleppmann.com/2016/02/08/how-to-visualize-a-distributed-system.html", duration="10 min read", reason="Why: Foundational mental model for data-intensive system design.", signal_score=94),
-        ]
-
-    if any(k in g for k in ["sleep", "health", "fitness", "habit", "wellbeing", "recovery"]):
-        return [
-            ContentItem(type="video",   title="Huberman Lab – Master Your Sleep",           youtube_id="nm1TxQj9IsQ", url="https://www.youtube.com/watch?v=nm1TxQj9IsQ",  duration="18 min",      reason="Why: Evidence-based sleep protocol from Stanford Neuroscience.", signal_score=98),
-            ContentItem(type="short",   title="5 Habits That Changed My Life in 60 Seconds", youtube_id="GgzrRkS-SE0", url="https://www.youtube.com/shorts/GgzrRkS-SE0",   duration="60 sec",      reason="Why: High-impact micro-habit audit — quick actionable reset.",   signal_score=96),
-            ContentItem(type="reel",    title="Morning Sunlight Routine – Why It Works",      youtube_id="LzBtBe2GQBM", url="https://www.youtube.com/watch?v=LzBtBe2GQBM",  duration="45 sec",      reason="Why: Neuroscience visual of how light resets circadian rhythm.",  signal_score=95),
-            ContentItem(type="article", title="Atomic Habits – The 1% Rule for Growth",       youtube_id="",           url="https://jamesclear.com/atomic-habits",          duration="7 min read",  reason="Why: Highest-leverage habit framework — applies to every goal.",  signal_score=94),
-        ]
-
-    # Generic growth fallback
     return [
         ContentItem(type="video",   title="Deep Work – Achieve Peak Performance",   youtube_id="gTaJhjQHcf8", url="https://www.youtube.com/watch?v=gTaJhjQHcf8", duration="14 min",     reason="Why: Cal Newport deep work framework — directly boosts ability to reach your goal.",      signal_score=98),
         ContentItem(type="short",   title="The 5-Second Rule in 60 Seconds",        youtube_id="k2TaFVANNTg", url="https://www.youtube.com/shorts/k2TaFVANNTg",  duration="60 sec",     reason="Why: Instant motivation trigger — activates momentum toward your goal.",                  signal_score=96),
         ContentItem(type="reel",    title="Flow State Activation – Get Deep Focus",  youtube_id="QkOCbt_o2HY", url="https://www.youtube.com/watch?v=QkOCbt_o2HY", duration="45 sec",     reason="Why: Primes your brain for high-yield learning sessions.",                               signal_score=95),
-        ContentItem(type="article", title="The Feynman Technique – Learn Anything",  youtube_id="",           url="https://fs.blog/feynman-technique/",          duration="6 min read", reason="Why: The best learning strategy — explains through teaching to lock in understanding.",  signal_score=94),
+        ContentItem(type="article", title="The Feynman Technique – Learn Anything",  youtube_id="",           url="https://fs.blog/feynman-technique/", duration="6 min read", reason="Why: The best learning strategy — explains through teaching to lock in understanding.",  signal_score=94),
     ]
 
 
 # ═══════════════════════════════════════════════════════════════
-# PILLAR 3 — HABIT STEERING / DIGITAL GUARDIAN
+# 3. HABIT STEERING & DIGITAL GUARDIAN
 # ═══════════════════════════════════════════════════════════════
 
 @app.post("/api/habit-check", response_model=HabitCheckResponse)
 async def habit_check(req: HabitCheckRequest):
-    """
-    Digital Guardian — intercepts time-wasting patterns.
-    POST body: { "activity": "scrolling Twitter", "duration_minutes": 20, "user_id": "..." }
-    """
+    """Digital Guardian — intercepts time-wasting patterns."""
     time_wasting = ["twitter", "x.com", "instagram", "tiktok", "youtube shorts", "scroll", "reddit", "facebook"]
     is_wasting = any(k in req.activity.lower() for k in time_wasting)
 
     if is_wasting and req.duration_minutes >= 10:
         redirect = f"Redirect {req.duration_minutes} mins from '{req.activity}' to a Focus Sprint"
+        log_obj = {
+            "user_id": req.user_id or "usr_default",
+            "intercept_trigger": req.activity,
+            "time_saved_minutes": req.duration_minutes,
+            "redirected_sprint": redirect,
+            "user_accepted": True,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }
+        in_memory_db["habit_steering_logs"].append(log_obj)
 
-        # Save log to Supabase if connected
-        if supabase_client and req.user_id:
+        if supabase_client:
             try:
-                supabase_client.table("habit_steering_logs").insert({
-                    "user_id": req.user_id,
-                    "intercept_trigger": req.activity,
-                    "time_saved_minutes": req.duration_minutes,
-                    "redirected_sprint": redirect,
-                    "user_accepted": True
-                }).execute()
+                supabase_client.table("habit_steering_logs").insert(log_obj).execute()
             except Exception:
                 pass
 
@@ -328,22 +393,58 @@ async def habit_check(req: HabitCheckRequest):
     return HabitCheckResponse(intercept_required=False)
 
 
+@app.post("/api/habit-logs")
+async def save_habit_log(req: HabitLogRequest):
+    """Store a habit steering log event."""
+    log_obj = {
+        "user_id": req.user_id or "usr_default",
+        "intercept_trigger": req.intercept_trigger,
+        "time_saved_minutes": req.time_saved_minutes,
+        "redirected_sprint": req.redirected_sprint,
+        "user_accepted": req.user_accepted,
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+    in_memory_db["habit_steering_logs"].append(log_obj)
+
+    if supabase_client:
+        try:
+            res = supabase_client.table("habit_steering_logs").insert(log_obj).execute()
+            if res.data:
+                return {"status": "success", "data": res.data}
+        except Exception:
+            pass
+
+    return {"status": "success", "data": [log_obj]}
+
+
+@app.get("/api/habit-logs")
+async def get_habit_logs(user_id: Optional[str] = "usr_default"):
+    """Retrieve saved habit steering logs."""
+    if supabase_client:
+        try:
+            res = supabase_client.table("habit_steering_logs").select("*").eq("user_id", user_id).execute()
+            if res.data:
+                return {"logs": res.data}
+        except Exception:
+            pass
+
+    user_logs = [l for l in in_memory_db["habit_steering_logs"] if l.get("user_id") == user_id]
+    return {"logs": user_logs}
+
+
 # ═══════════════════════════════════════════════════════════════
-# PILLAR 4 — INTENT ANALYSIS ENDPOINT
+# 4. INTENT ANALYSIS
 # ═══════════════════════════════════════════════════════════════
 
 @app.post("/api/analyze-intent")
 async def analyze_intent(req: GoalRequest):
-    """
-    ML Intent Analysis — extracts domain, energy level, focus priority from goal text.
-    POST body: { "goal": "...", "mood": "focused" }
-    """
+    """Extract domain, energy score, and focus priority."""
     intent = _analyze_intent(req.goal)
     intent["mood"] = req.mood
     return intent
 
 
-def _analyze_intent(goal: str) -> dict:
+def _analyze_intent(goal: str) -> Dict[str, Any]:
     g = goal.lower()
     if any(k in g for k in ["react", "hooks", "frontend", "javascript"]):
         domain = "React & Modern Frontend Architecture"
@@ -365,10 +466,232 @@ def _analyze_intent(goal: str) -> dict:
 
 
 # ═══════════════════════════════════════════════════════════════
-# UTILITY HELPERS
+# 5. USER ASPIRATION / ONBOARDING
 # ═══════════════════════════════════════════════════════════════
 
-def _build_suggestions(prompt: str) -> list[str]:
+@app.post("/api/aspiration")
+async def save_aspiration(req: AspirationRequest):
+    """Store user growth aspiration and target timeline."""
+    asp_obj = {
+        "user_id": req.user_id or "usr_default",
+        "aspiration": req.aspiration,
+        "target_timeline": req.target_timeline,
+        "current_level": req.current_level,
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+    in_memory_db["user_aspirations"].append(asp_obj)
+
+    if supabase_client:
+        try:
+            res = supabase_client.table("user_aspirations").insert(asp_obj).execute()
+            if res.data:
+                return {"status": "success", "data": res.data}
+        except Exception:
+            pass
+
+    return {"status": "success", "data": [asp_obj]}
+
+
+@app.get("/api/aspiration")
+async def get_aspiration(user_id: Optional[str] = "usr_default"):
+    """Fetch user aspirations."""
+    if supabase_client:
+        try:
+            res = supabase_client.table("user_aspirations").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+            if res.data:
+                return {"aspirations": res.data}
+        except Exception:
+            pass
+
+    user_asps = [a for a in in_memory_db["user_aspirations"] if a.get("user_id") == user_id]
+    return {"aspirations": user_asps}
+
+
+# ═══════════════════════════════════════════════════════════════
+# 6. FOCUS ROOM SESSIONS
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/focus-sessions")
+async def save_focus_session(req: FocusSessionRequest):
+    """Log a completed focus room session."""
+    session_obj = {
+        "user_id": req.user_id or "usr_default",
+        "task_name": req.task_name,
+        "duration_minutes": req.duration_minutes,
+        "distractions_blocked": req.distractions_blocked,
+        "completed_at": req.completed_at or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+    in_memory_db["focus_sessions"].append(session_obj)
+
+    if supabase_client:
+        try:
+            res = supabase_client.table("focus_sessions").insert(session_obj).execute()
+            if res.data:
+                return {"status": "success", "data": res.data}
+        except Exception:
+            pass
+
+    return {"status": "success", "data": [session_obj]}
+
+
+@app.get("/api/focus-sessions")
+async def get_focus_sessions(user_id: Optional[str] = "usr_default"):
+    """Fetch completed focus sessions."""
+    if supabase_client:
+        try:
+            res = supabase_client.table("focus_sessions").select("*").eq("user_id", user_id).execute()
+            if res.data:
+                return {"sessions": res.data}
+        except Exception:
+            pass
+
+    user_sessions = [s for s in in_memory_db["focus_sessions"] if s.get("user_id") == user_id]
+    return {"sessions": user_sessions}
+
+
+# ═══════════════════════════════════════════════════════════════
+# 7. REFLECTIONS & JOURNALING
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/reflections")
+async def save_reflection(req: ReflectionRequest):
+    """Store a daily wellbeing reflection."""
+    ref_obj = {
+        "user_id": req.user_id or "usr_default",
+        "mood": req.mood,
+        "log_text": req.log_text,
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    }
+    in_memory_db["reflections"].append(ref_obj)
+
+    if supabase_client:
+        try:
+            res = supabase_client.table("reflections").insert(ref_obj).execute()
+            if res.data:
+                return {"status": "success", "data": res.data}
+        except Exception:
+            pass
+
+    return {"status": "success", "data": [ref_obj]}
+
+
+@app.get("/api/reflections")
+async def get_reflections(user_id: Optional[str] = "usr_default"):
+    """Retrieve saved reflections."""
+    if supabase_client:
+        try:
+            res = supabase_client.table("reflections").select("*").eq("user_id", user_id).execute()
+            if res.data:
+                return {"reflections": res.data}
+        except Exception:
+            pass
+
+    user_refs = [r for r in in_memory_db["reflections"] if r.get("user_id") == user_id]
+    return {"reflections": user_refs}
+
+
+# ═══════════════════════════════════════════════════════════════
+# 8. AUTHENTICATION & USER PROFILE ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/auth/register")
+async def register(req: AuthRegisterRequest):
+    """Register a new account via FastAPI."""
+    email_clean = req.email.strip().lower()
+    
+    # Check if user already exists
+    existing = next((u for u in in_memory_db["users"] if u["email"].lower() == email_clean), None)
+    if existing:
+        return {"status": "success", "user": {"id": existing["id"], "email": existing["email"], "name": existing["name"]}}
+
+    user_id = f"usr_{int(time.time() * 1000)}"
+    user_obj = {
+        "id": user_id,
+        "email": email_clean,
+        "password": req.password,
+        "name": req.display_name or email_clean.split("@")[0]
+    }
+    in_memory_db["users"].append(user_obj)
+
+    if supabase_client:
+        try:
+            supabase_client.from_("profiles").upsert([{
+                "user_id": user_id,
+                "display_name": user_obj["name"],
+                "current_role": "Growth Catalyst • Tier 3"
+            }]).execute()
+        except Exception:
+            pass
+
+    return {"status": "success", "user": {"id": user_id, "email": email_clean, "name": user_obj["name"]}}
+
+
+@app.post("/api/auth/login")
+async def login(req: AuthLoginRequest):
+    """Authenticate user credentials via FastAPI."""
+    email_clean = req.email.strip().lower()
+
+    user = next((u for u in in_memory_db["users"] if u["email"].lower() == email_clean), None)
+    if not user:
+        # Create user on first login for seamless hackathon UX
+        user_id = f"usr_{int(time.time() * 1000)}"
+        user = {
+            "id": user_id,
+            "email": email_clean,
+            "password": req.password,
+            "name": email_clean.split("@")[0].title()
+        }
+        in_memory_db["users"].append(user)
+
+    if user["password"] != req.password:
+        raise HTTPException(status_code=401, detail="Invalid password provided.")
+
+    return {
+        "status": "success",
+        "user": {
+            "id": user["id"],
+            "email": user["email"],
+            "name": user["name"]
+        }
+    }
+
+
+@app.get("/api/user/profile")
+async def get_profile(user_id: Optional[str] = "usr_default"):
+    """Fetch user VPM & identity profile from FastAPI."""
+    profile = in_memory_db["user_profiles"].get(user_id)
+    if not profile:
+        profile = {
+            "user_id": user_id,
+            "name": "Atharva Sur",
+            "role": "Growth Catalyst • Tier 3",
+            "aspiration": "Senior AI Architect",
+            "email": "atharva@synapse.ai",
+            "streak": "4-Day Focus Streak",
+            "level": "14",
+            "xp": "3,420",
+            "focus_time": "2h 15m",
+            "skills_verified": "12 Concepts",
+            "goal_velocity": "84%",
+            "vpm_index": "$4.82/min"
+        }
+    return {"profile": profile}
+
+
+@app.post("/api/user/profile")
+async def save_profile(req: UserProfileData):
+    """Update user profile metrics."""
+    user_id = req.user_id or "usr_default"
+    data_dict = req.dict()
+    in_memory_db["user_profiles"][user_id] = data_dict
+    return {"status": "success", "profile": data_dict}
+
+
+# ═══════════════════════════════════════════════════════════════
+# UTILITIES & SYSTEM STATUS
+# ═══════════════════════════════════════════════════════════════
+
+def _build_suggestions(prompt: str) -> List[str]:
     p = prompt.lower()
     if any(k in p for k in ["focus", "distract", "productiv"]):
         return ["Start a 25-min focus sprint", "Block social media now", "Try box breathing"]
@@ -379,12 +702,11 @@ def _build_suggestions(prompt: str) -> list[str]:
     return ["Analyse my aspiration gap", "Generate a focus sprint", "Curate 4 resources"]
 
 
-# ── Health-check route ────────────────────────────────────────
 @app.get("/")
 async def root():
     return {
-        "status": "Synapse AI FastAPI Backend is running ✅",
+        "status": "Synapse AI FastAPI Backend Engine is running ✅",
         "gemini": "connected" if gemini_model else "offline (add GEMINI_API_KEY to backend/.env)",
-        "supabase": "connected" if supabase_client else "offline (add SUPABASE credentials to backend/.env)",
+        "supabase": "connected" if supabase_client else "offline (using FastAPI in-memory fallback store)",
         "docs": "http://localhost:8000/docs"
     }

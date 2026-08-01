@@ -41,7 +41,7 @@ const AGENT_PERSONAS = {
   }
 };
 
-import { sendOllamaChatRequest } from '../lib/ollamaClient';
+import { chatWithBackend } from '../lib/backendApi';
 
 // CUSTOM LIVE / OLLAMA AGENTIC CHAT HOOK
 function useMockChat(activeAgent) {
@@ -118,24 +118,18 @@ function useMockChat(activeAgent) {
     }
 
     try {
-      const systemPrompt = {
-        role: 'system',
-        content: `You are ${activeAgent.name}, ${activeAgent.role}. ${activeAgent.tagline} Format your response clearly with markdown bullet points where appropriate.`
-      };
-
       const historyFormatted = messages.map(m => ({
         role: m.role === 'user' ? 'user' : 'assistant',
-        content: m.content
+        text: m.content
       }));
 
-      const chatMessages = [systemPrompt, ...historyFormatted.slice(-4), { role: 'user', content: promptText }];
-      
-      const ollamaRes = await sendOllamaChatRequest(chatMessages, {
-        model: 'llama3',
-        temperature: 0.7
-      });
+      // Call FastAPI backend — all AI logic handled server-side
+      const backendRes = await chatWithBackend(
+        `[${activeAgent.name}] ${promptText}`,
+        historyFormatted.slice(-6)
+      );
 
-      const text = ollamaRes.choices?.[0]?.message?.content;
+      const text = backendRes?.reply;
       if (text) {
         responseTemplate = text;
       }

@@ -8,10 +8,11 @@ import {
   Volume2,
   VolumeX,
   CheckCircle2,
+  Shield,
   Lock,
   CloudRain
 } from 'lucide-react';
-import { saveHabitSteeringLogToSupabase } from '../lib/supabaseClient';
+import { saveFocusSessionToBackend } from '../lib/backendApi';
 
 export default function FocusRoom({ isDarkMode = false }) {
   // Manual Time Input States (Hours & Minutes)
@@ -130,11 +131,10 @@ export default function FocusRoom({ isDarkMode = false }) {
       setIsActive(false);
       setIsCompleted(true);
 
-      saveHabitSteeringLogToSupabase({
-        intercept_trigger: 'focus_sprint_complete',
-        time_saved_minutes: Math.round(totalSeconds / 60),
-        redirected_sprint: focusTask,
-        user_accepted: true
+      saveFocusSessionToBackend({
+        task_name: focusTask,
+        duration_minutes: Math.round(totalSeconds / 60),
+        distractions_blocked: distractionCount
       });
     }
     return () => clearInterval(interval);

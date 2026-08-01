@@ -1,50 +1,18 @@
 /**
- * Browser Client for Local Ollama Provider & AI Endpoints
- * Prevents importing serverless modules into client Vite bundle.
+ * ollamaClient.js — STUB (AI moved to FastAPI backend)
+ * Kept as an empty stub so existing imports don't break at build time.
+ * All AI logic now lives in backend/main.py
  */
 
-export async function sendOllamaChatRequest(messages, options = {}) {
-  try {
-    const res = await fetch('http://localhost:11434/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: options.model || 'llama3',
-        messages,
-        temperature: options.temperature || 0.7
-      })
-    });
-    if (!res.ok) throw new Error(`Ollama HTTP error ${res.status}`);
-    return await res.json();
-  } catch (err) {
-    throw new Error(`Ollama connection error: ${err.message}`);
-  }
+export async function sendOllamaChatRequest() {
+  console.warn('[ollamaClient] Deprecated: AI handled by FastAPI backend at localhost:8000');
+  return null;
 }
 
-export async function evaluateContentWithOllama({ content, targetGoal }) {
-  try {
-    const prompt = `Evaluate the following content quality and cognitive load for a user aiming for: "${targetGoal}". Content: ${content.slice(0, 500)}`;
-    const res = await sendOllamaChatRequest([
-      { role: 'system', content: 'Respond with valid JSON: {"relevanceScore": 90, "cognitiveLoad": "Moderate", "clarityRating": 9, "sentiment": "Inspiring"}' },
-      { role: 'user', content: prompt }
-    ]);
-    const text = res.choices?.[0]?.message?.content || '{}';
-    return JSON.parse(text);
-  } catch (err) {
-    return { relevanceScore: 88, cognitiveLoad: 'Moderate', clarityRating: 9, sentiment: 'Inspiring' };
-  }
+export async function evaluateContentWithOllama() {
+  return null;
 }
 
-export async function extractAutonomousDataWithOllama({ rawText, sourceUrl }) {
-  try {
-    const prompt = `Extract metadata from text. Text: ${rawText.slice(0, 500)}`;
-    const res = await sendOllamaChatRequest([
-      { role: 'system', content: 'Respond with valid JSON: {"title": "Extracted Unit", "summary": "...", "difficultyLevel": "Intermediate"}' },
-      { role: 'user', content: prompt }
-    ]);
-    const text = res.choices?.[0]?.message?.content || '{}';
-    return JSON.parse(text);
-  } catch (err) {
-    return { title: 'Extracted Learning Unit', summary: rawText.slice(0, 150), difficultyLevel: 'Intermediate' };
-  }
+export async function extractAutonomousDataWithOllama() {
+  return null;
 }

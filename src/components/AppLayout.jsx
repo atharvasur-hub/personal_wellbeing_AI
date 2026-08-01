@@ -381,20 +381,12 @@ export default function AppLayout({ currentUser, onLogout }) {
               {activeMenu === 'journey' && 'JOURNEY MAP'}
             </span>
 
-            <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-mono font-bold ${supabase
-              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600'
-              : 'bg-stone-500/10 border-stone-500/20 text-stone-400'
-              }`}>
-              <Database className="w-3 h-3" />
-              <span>{supabase ? 'SUPABASE: CONNECTED' : 'SUPABASE: DEMO'}</span>
-            </div>
-
             <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-mono font-bold ${backendOnline
-                ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-600'
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-500'
                 : 'bg-stone-500/10 border-stone-500/20 text-stone-400'
               }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${backendOnline ? 'bg-indigo-500 animate-pulse' : 'bg-stone-400'}`} />
-              <span>{backendOnline ? 'FASTAPI: LIVE' : 'FASTAPI: OFFLINE'}</span>
+              <span className={`w-1.5 h-1.5 rounded-full ${backendOnline ? 'bg-emerald-500 animate-pulse' : 'bg-stone-400'}`} />
+              <span>{backendOnline ? 'FASTAPI BACKEND: ONLINE (PORT 8000)' : 'FASTAPI BACKEND: OFFLINE'}</span>
             </div>
           </div>
 

@@ -5,7 +5,7 @@ import {
   Film, Loader2, ChevronRight, Check
 } from 'lucide-react';
 import { fetchAIRecommendations } from '../lib/contentRecommender';
-import { saveUserAspirationToSupabase } from '../lib/supabaseClient';
+import { saveAspirationToBackend } from '../lib/backendApi';
 
 // Media type config
 const MEDIA_CONFIG = {

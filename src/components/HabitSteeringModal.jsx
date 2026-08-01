@@ -1,12 +1,12 @@
 import React from 'react';
 import { ShieldCheck, Flame, ArrowRight, X, Zap } from 'lucide-react';
-import { saveHabitSteeringLogToSupabase } from '../lib/supabaseClient';
+import { saveHabitLogToBackend } from '../lib/backendApi';
 
 export default function HabitSteeringModal({ isOpen, onClose, isDarkMode = false }) {
   if (!isOpen) return null;
 
   const handleAcceptRedirect = () => {
-    saveHabitSteeringLogToSupabase({
+    saveHabitLogToBackend({
       intercept_trigger: 'doomscroll',
       time_saved_minutes: 15,
       redirected_sprint: 'React Hooks Sprint',
