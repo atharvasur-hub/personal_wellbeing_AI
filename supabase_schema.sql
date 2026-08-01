@@ -1,57 +1,20 @@
--- SUPABASE POSTGRESQL DATABASE SCHEMA (PER-USER DATA ISOLATION & ML PILLARS)
+-- SUPABASE POSTGRESQL DATABASE MIGRATION SCHEMA
 -- Project: Agentic Growth & Personal Wellbeing AI
 
--- 1. Profiles Table
+-- 1. Create Profiles Table
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL UNIQUE DEFAULT auth.uid(),
+  user_id TEXT UNIQUE NOT NULL,
   display_name TEXT DEFAULT 'Atharva Sur',
-  current_role TEXT DEFAULT 'Growth Catalyst • Tier 3',
+  role_title TEXT DEFAULT 'Growth Catalyst • Tier 3',
   streak_count INT DEFAULT 4,
   level_xp INT DEFAULT 3420,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 2. Intent & Behavior Analysis Table (Goals & Aspirations)
-CREATE TABLE IF NOT EXISTS public.user_aspirations (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL DEFAULT auth.uid(),
-  primary_goal TEXT NOT NULL,
-  current_mood TEXT DEFAULT 'neutral',
-  fatigue_level TEXT DEFAULT 'medium',
-  intent_vector JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- 3. Content Signal Evaluation Table (Signal-to-Noise Scoring)
-CREATE TABLE IF NOT EXISTS public.content_evaluations (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL DEFAULT auth.uid(),
-  title TEXT NOT NULL,
-  media_type TEXT NOT NULL, -- 'video' | 'article' | 'tool'
-  signal_score INT DEFAULT 95, -- 0 to 100% Signal Ratio
-  noise_filtered_pct INT DEFAULT 88,
-  cognitive_load TEXT DEFAULT 'low',
-  ai_reasoning_badge TEXT NOT NULL,
-  url TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- 4. Proactive Habit Steering Logs Table (Digital Guardian Intercepts)
-CREATE TABLE IF NOT EXISTS public.habit_steering_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL DEFAULT auth.uid(),
-  intercept_trigger TEXT NOT NULL, -- 'doomscroll' | 'distraction' | 'fatigue'
-  time_saved_minutes INT DEFAULT 15,
-  redirected_sprint TEXT NOT NULL,
-  user_accepted BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- 5. Chat Messages Table
+-- 2. Create Chat Messages Table for AI Assistant Thread Persistence
 CREATE TABLE IF NOT EXISTS public.chat_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL DEFAULT auth.uid(),
   session_id TEXT DEFAULT 'default_session',
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
   text TEXT NOT NULL,
@@ -59,38 +22,50 @@ CREATE TABLE IF NOT EXISTS public.chat_messages (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 6. Reflections Table
+-- 3. Create Identity Nodes Table
+CREATE TABLE IF NOT EXISTS public.identity_nodes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  node_name TEXT UNIQUE NOT NULL,
+  current_mastery INT DEFAULT 8,
+  target_mastery INT DEFAULT 10,
+  category TEXT DEFAULT 'Technical Systems',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 4. Create Daily Reflections Table
 CREATE TABLE IF NOT EXISTS public.reflections (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL DEFAULT auth.uid(),
   mood TEXT NOT NULL,
   log_text TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 7. Roadmap Items Table
+-- 5. Create Goal Roadmap Items Table
 CREATE TABLE IF NOT EXISTS public.roadmap_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL DEFAULT auth.uid(),
   text TEXT NOT NULL,
   completed BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- ENABLE ROW LEVEL SECURITY (RLS) ON ALL TABLES
+-- Enable Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.user_aspirations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.content_evaluations ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.habit_steering_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.identity_nodes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reflections ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.roadmap_items ENABLE ROW LEVEL SECURITY;
 
--- PER-USER ISOLATION POLICIES (Users can ONLY access their own rows)
-CREATE POLICY "Per User Profiles" ON public.profiles FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "Per User Aspirations" ON public.user_aspirations FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "Per User Content Evaluations" ON public.content_evaluations FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "Per User Habit Steering Logs" ON public.habit_steering_logs FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "Per User Chat Messages" ON public.chat_messages FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "Per User Reflections" ON public.reflections FOR ALL USING (auth.uid() = user_id);
-CREATE POLICY "Per User Roadmap Items" ON public.roadmap_items FOR ALL USING (auth.uid() = user_id);
+-- Create Public Access Policies (Allow read/write for frontend demo)
+CREATE POLICY "Public Read Profiles" ON public.profiles FOR SELECT USING (true);
+CREATE POLICY "Public Insert Profiles" ON public.profiles FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Public Read Chat" ON public.chat_messages FOR SELECT USING (true);
+CREATE POLICY "Public Insert Chat" ON public.chat_messages FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public Delete Chat" ON public.chat_messages FOR DELETE USING (true);
+
+CREATE POLICY "Public Read Reflections" ON public.reflections FOR SELECT USING (true);
+CREATE POLICY "Public Insert Reflections" ON public.reflections FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Public Read Roadmap" ON public.roadmap_items FOR SELECT USING (true);
+CREATE POLICY "Public Insert Roadmap" ON public.roadmap_items FOR INSERT WITH CHECK (true);
+CREATE POLICY "Public Update Roadmap" ON public.roadmap_items FOR UPDATE USING (true);
