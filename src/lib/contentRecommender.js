@@ -54,7 +54,7 @@ const OFFLINE_FALLBACK = [
 export async function fetchAIRecommendations(goalText, userId = null) {
   const result = await recommendContent(goalText, 'focused', userId);
 
-  if (result?.items && result.items.length >= 4) {
+  if (result?.items && result.items.length > 0) {
     // Normalize snake_case (Python) → camelCase (React)
     return result.items.map(item => ({
       type: item.type,
