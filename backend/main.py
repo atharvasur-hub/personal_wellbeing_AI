@@ -44,7 +44,16 @@ def _generate_gemini(prompt: str) -> str:
         return ""
     try:
         genai.configure(api_key=key)
-        candidate_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
+        candidate_models = [
+            "gemini-2.5-flash",
+            "gemini-3.6-flash",
+            "gemini-2.0-flash",
+            "gemini-flash-latest",
+            "gemini-2.5-pro",
+            "gemini-1.5-flash-latest",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro"
+        ]
         for model_name in candidate_models:
             try:
                 m = genai.GenerativeModel(model_name)
@@ -968,7 +977,7 @@ def _build_suggestions(prompt: str) -> List[str]:
 async def root():
     return {
         "status": "Synapse AI FastAPI Backend Engine is running ✅",
-        "gemini": "connected" if gemini_model else "offline (add GEMINI_API_KEY to backend/.env)",
+        "gemini": "connected" if gemini_configured else "offline (add GEMINI_API_KEY to backend/.env)",
         "supabase": "connected" if supabase_client else "offline (using FastAPI in-memory fallback store)",
         "docs": "http://localhost:8000/docs"
     }
