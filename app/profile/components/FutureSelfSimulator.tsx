@@ -14,21 +14,63 @@ import {
 } from 'recharts';
 import { Sparkles, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
-const projectionData = [
-  { month: 'Month 1 (Start)', PassiveTrend: 20, AspirationTrend: 0, DoomscrollHours: 3.5, FlowHours: 0.0 },
-  { month: 'Month 2', PassiveTrend: 25, AspirationTrend: 35, DoomscrollHours: 3.0, FlowHours: 6.0 },
-  { month: 'Month 3', PassiveTrend: 30, AspirationTrend: 60, DoomscrollHours: 2.2, FlowHours: 12.0 },
-  { month: 'Month 4', PassiveTrend: 35, AspirationTrend: 78, DoomscrollHours: 1.5, FlowHours: 16.5 },
-  { month: 'Month 5', PassiveTrend: 40, AspirationTrend: 90, DoomscrollHours: 0.8, FlowHours: 20.0 },
-  { month: 'Month 6 (Target)', PassiveTrend: 45, AspirationTrend: 98, DoomscrollHours: 0.2, FlowHours: 24.0 },
-];
+const generateProjectionData = (userXP: number, focusHours: number) => {
+  const baseMastery = Math.min(Math.floor(userXP / 100), 20); // Starting mastery
+  const velocityScore = Math.min((focusHours / 10) + (userXP / 500), 5); // 0 to 5 multiplier
+  
+  return Array.from({ length: 6 }).map((_, i) => {
+    const monthIndex = i + 1;
+    const isStart = i === 0;
+    const isTarget = i === 5;
+    
+    // Aspiration compounds based on velocity
+    const aspirationGrowth = Math.floor(baseMastery + (velocityScore * monthIndex * 3));
+    const cappedAspiration = Math.min(aspirationGrowth, 100);
+    
+    // Passive grows slowly, representing "decay" or lost potential
+    const passiveGrowth = Math.floor(20 + (monthIndex * 5));
+    
+    // Hours translate
+    const flowHours = Math.floor(focusHours + (velocityScore * monthIndex * 4));
+    const doomscrollHours = Math.max(3.5 - (velocityScore * monthIndex * 0.5), 0.2);
+
+    return {
+      month: isStart ? 'Month 1 (Start)' : isTarget ? 'Month 6 (Target)' : `Month ${monthIndex}`,
+      PassiveTrend: passiveGrowth,
+      AspirationTrend: cappedAspiration,
+      DoomscrollHours: parseFloat(doomscrollHours.toFixed(1)),
+      FlowHours: parseFloat(flowHours.toFixed(1))
+    };
+  });
+};
 
 interface FutureSelfSimulatorProps {
   isDarkMode?: boolean;
+  userXP?: string;
+  focusTime?: string;
+  focusStreak?: string;
 }
 
-export default function FutureSelfSimulator({ isDarkMode = false }: FutureSelfSimulatorProps) {
+export default function FutureSelfSimulator({ 
+  isDarkMode = false,
+  userXP = '0',
+  focusTime = '0h 0m'
+}: FutureSelfSimulatorProps) {
   const [selectedMetric, setSelectedMetric] = useState<'mastery' | 'hours'>('mastery');
+  
+  const xpNum = parseInt(userXP, 10) || 0;
+  
+  // Extract hours from focusTime string like "1h 25m"
+  const hoursMatch = focusTime.match(/(\d+)h/);
+  const minsMatch = focusTime.match(/(\d+)m/);
+  const hours = hoursMatch ? parseInt(hoursMatch[1], 10) : 0;
+  const mins = minsMatch ? parseInt(minsMatch[1], 10) : 0;
+  const totalFocusHours = hours + (mins / 60);
+
+  const projectionData = generateProjectionData(xpNum, totalFocusHours);
+  
+  const targetAspiration = projectionData[5].AspirationTrend;
+  const targetPassive = projectionData[5].PassiveTrend;
 
   return (
     <div className={`relative overflow-hidden rounded-3xl border p-6 shadow-sm flex flex-col justify-between gap-6 transition-all ${
@@ -97,7 +139,7 @@ export default function FutureSelfSimulator({ isDarkMode = false }: FutureSelfSi
               </span>
             </div>
           </div>
-          <span className="font-mono text-rose-600 font-bold text-sm">35 pts</span>
+          <span className="font-mono text-rose-600 font-bold text-sm">{targetPassive} pts</span>
         </div>
 
         <div className={`rounded-2xl border p-3.5 flex items-center justify-between ${
@@ -114,11 +156,11 @@ export default function FutureSelfSimulator({ isDarkMode = false }: FutureSelfSi
                 ASPIRATION TREND (TARGET)
               </span>
               <span className={`text-xs font-semibold ${isDarkMode ? 'text-slate-200' : 'text-stone-800'}`}>
-                Projected to reach 98% Senior Architect Mastery
+                Projected to reach {targetAspiration}% Senior Architect Mastery
               </span>
             </div>
           </div>
-          <span className="font-mono text-emerald-600 font-bold text-sm">98 pts</span>
+          <span className="font-mono text-emerald-600 font-bold text-sm">{targetAspiration} pts</span>
         </div>
       </div>
 
